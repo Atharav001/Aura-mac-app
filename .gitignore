@@ -1,0 +1,41 @@
+# Xcode
+*.xcworkspace
+xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+build/
+*.build/
+.build/
+
+# SwiftPM
+/.build/
+Packages/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+*.pem
+*.p12
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.settings/
+.project
+.classpath
+
+# Env
+.env
+.env.local
+*.env
+
+# Logs
+*.log
