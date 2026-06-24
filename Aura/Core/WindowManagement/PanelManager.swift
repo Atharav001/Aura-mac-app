@@ -21,6 +21,10 @@ final class PanelManager: @unchecked Sendable {
         @ViewBuilder content: () -> Content
     ) -> UUID {
         let panel = FloatingPanel(rootView: content(), size: size)
+        panel.panelID = id
+        panel.onClose = { [weak self] closedID in
+            self?.closePanel(id: closedID)
+        }
 
         let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let pos = position ?? CGPoint(
@@ -28,7 +32,7 @@ final class PanelManager: @unchecked Sendable {
             y: screenFrame.midY - size.height / 2
         )
         panel.setFrameOrigin(pos)
-        panel.orderFront(nil)
+        panel.makeKeyAndOrderFront(nil)
 
         let observer = addDragSnapping(to: panel)
 
@@ -37,6 +41,52 @@ final class PanelManager: @unchecked Sendable {
             observers[id] = observer
         }
         return id
+    }
+
+    private var settingsWindow: NSWindow?
+
+    @MainActor
+    func openSettingsWindow() {
+        if let existing = settingsWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settingsView = SettingsView()
+            .frame(minWidth: 580, idealWidth: 620, maxWidth: .infinity, minHeight: 420, idealHeight: 480, maxHeight: .infinity)
+        let hostingView = NSHostingView(rootView: settingsView)
+        hostingView.autoresizingMask = [.width, .height]
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 480),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Aura Settings"
+        window.contentView = hostingView
+        window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 580, height: 420)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            self?.settingsWindow = nil
+            let dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
+            if !dockVisible && (self?.panels.isEmpty == true) {
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
+
+        settingsWindow = window
     }
 
     func closePanel(id: UUID) {

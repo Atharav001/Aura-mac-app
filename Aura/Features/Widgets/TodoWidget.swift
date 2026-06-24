@@ -3,6 +3,7 @@ import SwiftUI
 struct TodoWidget: View {
     @State private var viewModel = TodoViewModel()
     @State private var hoveredDelete: UUID?
+    @FocusState private var textFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 12) {
@@ -22,6 +23,7 @@ struct TodoWidget: View {
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(.white)
                     .accentColor(.blue)
+                    .focused($textFieldFocused)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .background(
@@ -72,6 +74,11 @@ struct TodoWidget: View {
             }
         }
         .padding(16)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                textFieldFocused = true
+            }
+        }
     }
 
     private func todoRow(_ item: TodoItem) -> some View {

@@ -25,10 +25,10 @@ struct NotchDetector {
         let notch = notchRect(screen: screen)
         guard notch != .zero else { return .zero }
         return CGRect(
-            x: notch.midX - 150,
-            y: notch.minY - 80,
-            width: 300,
-            height: notch.height + 80
+            x: notch.midX - 200,
+            y: notch.minY - 160,
+            width: 400,
+            height: notch.height + 160
         )
     }
 
@@ -36,9 +36,9 @@ struct NotchDetector {
         let notch = notchRect(screen: screen)
         guard notch != .zero else { return .zero }
         return CGRect(
-            x: notch.midX - 32,
+            x: notch.midX - 40,
             y: notch.midY - notch.height / 2,
-            width: 64,
+            width: 80,
             height: notch.height
         )
     }

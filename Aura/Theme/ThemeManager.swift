@@ -72,6 +72,52 @@ enum AccentTheme: String, CaseIterable, Equatable {
     }
 }
 
+@MainActor @Observable
+final class AppSettingsManager {
+    static let shared = AppSettingsManager()
+
+    var glassmorphismEnabled: Bool = true
+    var accentHex: String = "#007AFF"
+    var accentColor: Color = .blue
+    var notchStyle: String = "melted"
+
+    private init() {
+        reload()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(reloadFromNotification),
+            name: .settingsDidChange,
+            object: nil
+        )
+    }
+
+    @objc private func reloadFromNotification() {
+        reload()
+    }
+
+    func reload() {
+        glassmorphismEnabled = DataStore.shared.bool(for: .glassmorphismEnabled, default: true)
+        accentHex = DataStore.shared.string(for: .accentColor) ?? "#007AFF"
+        accentColor = Color(hex: accentHex) ?? .blue
+        notchStyle = DataStore.shared.string(for: .notchStyle) ?? "melted"
+    }
+
+    func saveAndNotify(glassmorphism: Bool? = nil, accentHex: String? = nil, notchStyle: String? = nil) {
+        if let g = glassmorphism {
+            DataStore.shared.set(key: .glassmorphismEnabled, value: g)
+        }
+        if let h = accentHex {
+            DataStore.shared.set(key: .accentColor, value: h)
+        }
+        if let n = notchStyle {
+            DataStore.shared.set(key: .notchStyle, value: n)
+        }
+        reload()
+        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+    }
+}
+
+// Time-based theme
 final class ThemeManager: @unchecked Sendable {
     static let shared = ThemeManager()
 
@@ -90,4 +136,21 @@ final class ThemeManager: @unchecked Sendable {
 
     var accentColor: Color { selectedTheme.accentColor }
     var glassOpacity: Double { selectedTheme.glassOpacity }
+}
+
+extension Color {
+    init?(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        guard hex.count == 6 else { return nil }
+        var int = UInt64()
+        guard Scanner(string: hex).scanHexInt64(&int) else { return nil }
+        let r = Double((int >> 16) & 0xFF) / 255
+        let g = Double((int >> 8) & 0xFF) / 255
+        let b = Double(int & 0xFF) / 255
+        self.init(red: r, green: g, blue: b)
+    }
+}
+
+extension Notification.Name {
+    static let settingsDidChange = Notification.Name("com.aura.settingsDidChange")
 }

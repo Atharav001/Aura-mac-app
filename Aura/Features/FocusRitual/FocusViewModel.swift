@@ -6,6 +6,7 @@ final class FocusViewModel {
     var isActive: Bool = false
     var rippleStrength: CGFloat = 0
     var dimOpacity: CGFloat = 0
+    var completionWaveStrength: CGFloat = 0
 
     func startFocus() {
         isActive = true
@@ -28,6 +29,7 @@ final class FocusViewModel {
             MainActor.assumeIsolated {
                 self.isActive = false
                 self.rippleStrength = 0
+                self.completionWaveStrength = 0
             }
         }
     }
@@ -39,12 +41,30 @@ final class FocusViewModel {
         scheduleRippleEnd()
     }
 
+    func triggerCompletionWave() {
+        withAnimation(.spring(response: 0.8, dampingFraction: 0.5, blendDuration: 0.4)) {
+            completionWaveStrength = 1
+        }
+        scheduleCompletionWaveEnd()
+    }
+
     nonisolated func scheduleRippleEnd() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
             guard let self else { return }
             MainActor.assumeIsolated {
                 withAnimation(.easeOut(duration: 0.5)) {
                     self.rippleStrength = 0
+                }
+            }
+        }
+    }
+
+    nonisolated func scheduleCompletionWaveEnd() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                withAnimation(.easeOut(duration: 1.0)) {
+                    self.completionWaveStrength = 0
                 }
             }
         }

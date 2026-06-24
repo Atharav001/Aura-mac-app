@@ -3,55 +3,70 @@ import SwiftUI
 struct MenuBarView: View {
     let viewModel: MenuBarViewModel
     @State private var hoveredButton: String?
+    @State private var appSettings = AppSettingsManager.shared
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 headerSection
-                Divider().overlay(.white.opacity(0.08)).padding(.horizontal, 16)
+                Divider().overlay(.primary.opacity(0.08)).padding(.horizontal, 16)
 
                 focusSection
-                Divider().overlay(.white.opacity(0.08)).padding(.horizontal, 16)
+                Divider().overlay(.primary.opacity(0.08)).padding(.horizontal, 16)
 
                 widgetSection
-                Divider().overlay(.white.opacity(0.08)).padding(.horizontal, 16)
+                Divider().overlay(.primary.opacity(0.08)).padding(.horizontal, 16)
 
                 audioHubSection
                 Spacer(minLength: 0)
 
-                Divider().overlay(.white.opacity(0.08)).padding(.horizontal, 16)
+                Divider().overlay(.primary.opacity(0.08)).padding(.horizontal, 16)
                 footerSection
             }
         }
         .scrollIndicators(.hidden)
-        .glassmorphic(opacity: 0.3, material: .popover)
+        .glassmorphic(opacity: 0.3, material: .popover, blendingMode: .behindWindow)
+        .tint(appSettings.accentColor)
     }
 
     // MARK: - Header
 
     private var headerSection: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.9))
+        Button {
+            MenuBarManager.shared.closePopover()
+            PanelManager.shared.openSettingsWindow()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.primary.opacity(0.9))
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Aura")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text("Command Center")
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.4))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Aura")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text("Command Center")
+                        .font(.system(size: 10, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "gearshape")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.tertiary)
             }
-
-            Spacer()
-
-            Image(systemName: "chevron.down")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.white.opacity(0.3))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(hoveredButton == "header" ? Color.primary.opacity(0.08) : Color.clear)
+            )
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .buttonStyle(.plain)
+        .onHover { isHovered in
+            hoveredButton = isHovered ? "header" : nil
+        }
     }
 
     // MARK: - Focus Section
@@ -86,7 +101,7 @@ struct MenuBarView: View {
                 title: "Spawn Stopwatch",
                 subtitle: "Count up timer widget"
             ) {
-                PanelManager.shared.spawnPanel(size: NSSize(width: 280, height: 320)) {
+                PanelManager.shared.spawnPanel(size: NSSize(width: 280, height: 380)) {
                     WidgetContainer {
                         StopwatchWidget()
                     }
@@ -142,14 +157,14 @@ struct MenuBarView: View {
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.25))
+                        .foregroundStyle(.tertiary)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.white.opacity(0.06))
+                        .fill(.primary.opacity(0.06))
                 )
             }
             .buttonStyle(PlainButtonStyle())
@@ -160,7 +175,7 @@ struct MenuBarView: View {
                         .scaleEffect(0.7)
                     Text("Scanning for MP3 files...")
                         .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.leading, 6)
                 .padding(.vertical, 4)
@@ -168,7 +183,7 @@ struct MenuBarView: View {
 
             if !viewModel.mp3Files.isEmpty {
                 ScrollView {
-                    VStack(spacing: 2) {
+                    LazyVStack(spacing: 2) {
                         ForEach(viewModel.mp3Files, id: \.self) { file in
                             audioFileRow(file)
                         }
@@ -180,7 +195,7 @@ struct MenuBarView: View {
             if viewModel.mp3Files.isEmpty && viewModel.musicDirectory != nil && !viewModel.isScanning {
                 Text("No MP3 files found")
                     .font(.system(size: 11, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(.tertiary)
                     .padding(.leading, 6)
                     .padding(.vertical, 4)
             }
@@ -204,7 +219,7 @@ struct MenuBarView: View {
             HStack(spacing: 10) {
                 Image(systemName: "music.note")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(.secondary)
                     .frame(width: 16)
 
                 Text(url.deletingPathExtension().lastPathComponent)
@@ -216,14 +231,14 @@ struct MenuBarView: View {
 
                 Image(systemName: "play.fill")
                     .font(.system(size: 8))
-                    .foregroundStyle(.white.opacity(0.25))
+                    .foregroundStyle(.tertiary)
             }
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(.primary.opacity(0.7))
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(.white.opacity(0.03))
+                    .fill(.primary.opacity(0.03))
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -242,7 +257,7 @@ struct MenuBarView: View {
                     Text("Quit Aura")
                         .font(.system(size: 11, weight: .regular))
                 }
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
             }
@@ -252,7 +267,7 @@ struct MenuBarView: View {
 
             Text("v1.0.0")
                 .font(.system(size: 10, weight: .regular))
-                .foregroundStyle(.white.opacity(0.2))
+                .foregroundStyle(.tertiary)
                 .padding(.trailing, 16)
         }
         .padding(.vertical, 6)
@@ -264,7 +279,7 @@ struct MenuBarView: View {
         Text(text)
             .font(.system(size: 10, weight: .semibold))
             .tracking(1.2)
-            .foregroundStyle(.white.opacity(0.35))
+            .foregroundStyle(.tertiary)
             .padding(.leading, 6)
     }
 
@@ -273,29 +288,29 @@ struct MenuBarView: View {
             HStack(spacing: 12) {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(.primary.opacity(0.85))
                     .frame(width: 20)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                     Text(subtitle)
                         .font(.system(size: 10, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(hoveredButton == id ? .white.opacity(0.12) : .white.opacity(0.05))
+                    .fill(hoveredButton == id ? Color.primary.opacity(0.12) : Color.primary.opacity(0.05))
             )
             .animation(AnimationCurves.widgetAppear, value: hoveredButton == id)
         }

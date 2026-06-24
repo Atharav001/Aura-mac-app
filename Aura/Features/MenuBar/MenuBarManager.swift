@@ -7,11 +7,12 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private let viewModel = MenuBarViewModel()
+    private var eventMonitor: Any?
 
     private override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
-        popover.behavior = .transient
+        popover.behavior = .applicationDefined
         popover.contentSize = NSSize(width: 360, height: 540)
 
         super.init()
@@ -31,10 +32,25 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
         if popover.isShown {
-            popover.performClose(sender)
+            closePopover()
         } else {
             popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
             positionWithinScreen(sender)
+            startEventMonitor()
+        }
+    }
+
+    private func startEventMonitor() {
+        stopEventMonitor()
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.closePopover()
+        }
+    }
+
+    private func stopEventMonitor() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
         }
     }
 
@@ -54,12 +70,27 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
     }
 
     func closePopover() {
+        stopEventMonitor()
         popover.performClose(nil)
+    }
+
+    func toggleIconVisibility(_ visible: Bool) {
+        if let button = statusItem.button {
+            button.isHidden = !visible
+        }
     }
 }
 
 extension MenuBarManager: NSPopoverDelegate {
     func popoverWillShow(_ notification: Notification) {
         viewModel.refreshAudioFiles()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        stopEventMonitor()
+    }
+
+    func popoverShouldDetach(_ popover: NSPopover) -> Bool {
+        false
     }
 }

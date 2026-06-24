@@ -6,10 +6,20 @@ struct PomodoroWidget: View {
 
     init(initialDuration: TimeInterval? = nil) {
         self.initialDuration = initialDuration
+        if let dur = initialDuration {
+            _viewModel = State(initialValue: {
+                let vm = PomodoroViewModel()
+                vm.totalTime = dur
+                vm.timeRemaining = dur
+                return vm
+            }())
+        }
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
+            phaseIndicator
+
             ZStack {
                 Circle()
                     .stroke(.white.opacity(0.08), lineWidth: 6)
@@ -43,10 +53,11 @@ struct PomodoroWidget: View {
             HStack(spacing: 16) {
                 if viewModel.state == .idle || viewModel.state == .finished {
                     widgetButton(icon: "play.fill", label: "Start") {
-                        viewModel.start(duration: viewModel.totalTime)
+                        viewModel.start()
                     }
                 } else {
-                    widgetButton(icon: viewModel.state == .running ? "pause.fill" : "play.fill", label: viewModel.state == .running ? "Pause" : "Resume") {
+                    widgetButton(icon: viewModel.state == .running ? "pause.fill" : "play.fill",
+                                 label: viewModel.state == .running ? "Pause" : "Resume") {
                         viewModel.togglePause()
                     }
 
@@ -55,12 +66,116 @@ struct PomodoroWidget: View {
                     }
                 }
             }
+
+            phasePicker
+
+            if viewModel.isAlarmPlaying {
+                alarmControls
+            } else if viewModel.state == .idle {
+                alarmSelectButton
+            }
         }
         .padding(.vertical, 8)
-        .onAppear {
-            if let duration = initialDuration {
-                viewModel.start(duration: duration)
+    }
+
+    private var alarmControls: some View {
+        HStack(spacing: 8) {
+            Button {
+                viewModel.stopAlarm()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "bell.slash.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("Stop Alarm")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .foregroundStyle(.red.opacity(0.7))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.red.opacity(0.12))
+                )
             }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var alarmSelectButton: some View {
+        Button {
+            viewModel.selectAlarmSound()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: viewModel.alarmURL != nil ? "music.note.list" : "bell")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(viewModel.alarmURL?.lastPathComponent ?? "Set Alarm Sound")
+                    .font(.system(size: 10, weight: .regular))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .foregroundStyle(viewModel.alarmURL != nil ? .orange.opacity(0.7) : .white.opacity(0.4))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.white.opacity(0.05))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var phaseIndicator: some View {
+        HStack(spacing: 6) {
+            ForEach(PomodoroViewModel.Phase.allCases, id: \.self) { phase in
+                Circle()
+                    .fill(phaseColor(phase))
+                    .frame(width: 8, height: 8)
+                    .opacity(viewModel.phase == phase ? 1 : 0.2)
+            }
+            Text(viewModel.phase.rawValue)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.leading, 4)
+            Spacer()
+            if viewModel.cycleCount > 0 {
+                Text("Cycle \(viewModel.cycleCount)")
+                    .font(.system(size: 9, weight: .regular, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private var phasePicker: some View {
+        HStack(spacing: 8) {
+            phaseButton("Focus", phase: .focus)
+            phaseButton("Short", phase: .shortBreak)
+            phaseButton("Long", phase: .longBreak)
+        }
+    }
+
+    private func phaseButton(_ label: String, phase: PomodoroViewModel.Phase) -> some View {
+        Button {
+            viewModel.switchToPhase(phase)
+        } label: {
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(viewModel.phase == phase ? .white : .white.opacity(0.4))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(viewModel.phase == phase ? phaseColor(phase).opacity(0.25) : .white.opacity(0.04))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func phaseColor(_ phase: PomodoroViewModel.Phase) -> Color {
+        switch phase {
+        case .focus: return .blue
+        case .shortBreak: return .green
+        case .longBreak: return .cyan
         }
     }
 

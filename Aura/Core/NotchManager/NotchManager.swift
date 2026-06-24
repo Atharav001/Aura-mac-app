@@ -24,17 +24,38 @@ final class NotchManager {
         panel = NotchPanel(contentView: hostingView, rect: viewModel.collapsedRect)
         panel?.orderFront(nil)
 
+        viewModel.onTogglePlayPause = { [weak self] in
+            LocalAudioManager.shared.togglePlayPause()
+            self?.refreshMediaInfo()
+        }
+        viewModel.onNextTrack = {
+            NotificationCenter.default.post(name: .remoteNextTrack, object: nil)
+        }
+        viewModel.onPreviousTrack = {
+            NotificationCenter.default.post(name: .remotePreviousTrack, object: nil)
+        }
+
         startMousePolling()
         MediaTracker.shared.startTracking()
         MediaTracker.shared.onUpdate = { [weak self] info in
             guard let self else { return }
             if let info {
+                let sourceInfo = MediaTracker.shared.sourceAppInfo()
+                let source: NotchViewModel.MediaSource
+                if let bundleID = sourceInfo?.bundleID {
+                    source = .system(bundleID: bundleID)
+                } else {
+                    source = .local
+                }
                 viewModel.showMedia(
                     title: info.title,
                     artist: info.artist,
                     isPlaying: info.isPlaying,
                     progress: info.duration > 0 ? info.elapsedTime / info.duration : 0,
-                    duration: info.duration
+                    duration: info.duration,
+                    source: source,
+                    appName: sourceInfo?.name ?? "",
+                    appIcon: sourceInfo?.icon
                 )
             } else {
                 viewModel.hideMedia()
@@ -62,9 +83,13 @@ final class NotchManager {
         }
     }
 
+    private var hideDelay: Double {
+        DataStore.shared.double(for: .notchHideDelay, default: 1.0)
+    }
+
     private func pollMousePosition() {
         let mouseLocation = NSEvent.mouseLocation
-        let checkRect = viewModel.expandedRect.insetBy(dx: -10, dy: -10)
+        let checkRect = viewModel.notchRect.insetBy(dx: -20, dy: -20)
         let isNear = checkRect.contains(mouseLocation)
 
         if isNear && !isHovering {
@@ -89,7 +114,7 @@ final class NotchManager {
             self?.collapse()
         }
         hideWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + hideDelay, execute: item)
     }
 
     private func collapse() {
@@ -100,8 +125,9 @@ final class NotchManager {
 
     private func animatePanelFrame(_ frame: CGRect) {
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.4
+            context.duration = 0.5
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
             panel?.animator().setFrame(frame, display: true)
         }
     }
@@ -109,5 +135,20 @@ final class NotchManager {
     private func screenDidChange() {
         viewModel.updateFrames()
         animatePanelFrame(viewModel.currentFrame)
+    }
+
+    private func refreshMediaInfo() {
+        let manager = LocalAudioManager.shared
+        if let url = manager.currentURL {
+            viewModel.showMedia(
+                title: url.deletingPathExtension().lastPathComponent,
+                artist: "Local File",
+                isPlaying: manager.isPlaying,
+                progress: manager.duration > 0 ? manager.currentTime / manager.duration : 0,
+                duration: manager.duration,
+                source: .local,
+                appName: "Local File"
+            )
+        }
     }
 }

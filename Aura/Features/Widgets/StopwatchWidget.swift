@@ -5,14 +5,50 @@ struct StopwatchWidget: View {
 
     var body: some View {
         VStack(spacing: 20) {
+            modePicker
+
+            if case .countdown = viewModel.mode {
+                ProgressView(value: viewModel.progress)
+                    .tint(.cyan.opacity(0.6))
+                    .scaleEffect(x: 1, y: 0.5, anchor: .center)
+            }
+
             Text(viewModel.formattedTime)
                 .font(.system(size: 42, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white)
+                .foregroundStyle(viewModel.isCountdownFinished ? .green : .white)
                 .contentTransition(.numericText())
                 .animation(.linear(duration: 0.1), value: viewModel.elapsed)
 
+            if viewModel.isCountdownFinished {
+                Text("Time's up!")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.green.opacity(0.7))
+
+                if viewModel.isAlarmPlaying {
+                    Button {
+                        viewModel.stopAlarm()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bell.slash.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Stop Alarm")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(.red.opacity(0.7))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(.red.opacity(0.12))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
             HStack(spacing: 12) {
-                stopwatchButton(icon: viewModel.isRunning ? "stop.fill" : "play.fill", label: viewModel.isRunning ? "Stop" : "Start") {
+                stopwatchButton(icon: viewModel.isRunning ? "stop.fill" : "play.fill",
+                                label: viewModel.isRunning ? "Stop" : "Start") {
                     if viewModel.isRunning {
                         viewModel.stop()
                     } else {
@@ -28,6 +64,10 @@ struct StopwatchWidget: View {
                     viewModel.lap()
                 }
                 .disabled(!viewModel.isRunning)
+            }
+
+            if case .countdown = viewModel.mode {
+                alarmButton
             }
 
             if !viewModel.laps.isEmpty {
@@ -56,6 +96,82 @@ struct StopwatchWidget: View {
             }
         }
         .padding(.vertical, 8)
+    }
+
+    private var modePicker: some View {
+        HStack(spacing: 8) {
+            modeButton("Stopwatch", mode: .stopwatch)
+            modeButton("Timer", mode: .countdown(target: 300))
+            if case .countdown = viewModel.mode {
+                timerPresets
+            }
+        }
+    }
+
+    private var timerPresets: some View {
+        HStack(spacing: 4) {
+            presetButton("1m", 60)
+            presetButton("5m", 300)
+            presetButton("10m", 600)
+            presetButton("30m", 1800)
+        }
+    }
+
+    private func presetButton(_ label: String, _ seconds: TimeInterval) -> some View {
+        Button {
+            viewModel.setMode(.countdown(target: seconds))
+        } label: {
+            Text(label)
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(.white.opacity(0.05))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func modeButton(_ label: String, mode: StopwatchViewModel.Mode) -> some View {
+        Button {
+            viewModel.setMode(mode)
+        } label: {
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(viewModel.mode == mode ? .white : .white.opacity(0.4))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(viewModel.mode == mode ? .white.opacity(0.15) : .white.opacity(0.04))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var alarmButton: some View {
+        Button {
+            viewModel.selectAlarmSound()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: viewModel.alarmURL != nil ? "music.note.list" : "bell")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(viewModel.alarmURL?.lastPathComponent ?? "Alarm Sound")
+                    .font(.system(size: 10, weight: .regular))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .foregroundStyle(viewModel.alarmURL != nil ? .orange.opacity(0.7) : .white.opacity(0.4))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.white.opacity(0.05))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func stopwatchButton(icon: String, label: String, tint: Color = .white, action: @escaping () -> Void) -> some View {
