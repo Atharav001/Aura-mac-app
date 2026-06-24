@@ -1,46 +1,96 @@
 import SwiftUI
 
+// MARK: - Boring Notch style settings
+
+let settingsSidebarBG = Color(nsColor: NSColor(red: 0.118, green: 0.118, blue: 0.118, alpha: 1))
+let settingsContentBG = Color(nsColor: NSColor(red: 0.145, green: 0.145, blue: 0.145, alpha: 1))
+let settingsCardBG = Color(nsColor: NSColor(red: 0.173, green: 0.173, blue: 0.173, alpha: 1))
+let settingsBorder = Color.white.opacity(0.06)
+let settingsCyan = Color(red: 0.196, green: 0.678, blue: 0.902)
+let settingsBlue = Color(red: 0, green: 0.478, blue: 1)
+let settingsSecondaryText = Color(red: 0.6, green: 0.6, blue: 0.6)
+let settingsBadgeBG = Color(nsColor: NSColor(red: 0.12, green: 0.12, blue: 0.12, alpha: 1))
+
 struct SettingsView: View {
-    @State private var selectedSection: Section = .appearance
+    @State private var selectedSection: Section = .general
     @State private var appSettings = AppSettingsManager.shared
 
-    @State private var appearanceMode: String = DataStore.shared.string(for: .appearanceMode) ?? "dark"
-    @State private var glassEnabled: Bool = DataStore.shared.bool(for: .glassmorphismEnabled, default: true)
-    @State private var dockVisible: Bool = DataStore.shared.bool(for: .dockVisible, default: false)
-    @State private var menuBarVisible: Bool = DataStore.shared.bool(for: .menuBarIconVisible, default: true)
+    // General
+    @State private var extendHoverArea = true
+    @State private var enableHaptics = true
+    @State private var openNotchOnHover = true
+    @State private var rememberLastTab = false
+    @State private var minHoverDuration: Double = DataStore.shared.double(for: .notchHideDelay, default: 1.0)
+    @State private var enableGestures = true
+    @State private var mediaHorizontalGestures = false
+    @State private var closeGesture = true
+    @State private var gestureSensitivity: Double = 0.5
+    @State private var notchHeightOption = "Match menubar height"
 
-    @State private var defaultOpacity: Double = DataStore.shared.double(for: .defaultOpacity, default: 1.0)
-    @State private var defaultBlur: Double = DataStore.shared.double(for: .defaultBlur, default: 0.5)
-    @State private var defaultPin: Bool = DataStore.shared.bool(for: .defaultPin, default: false)
+    // Appearance
+    @State private var showTabs = true
+    @State private var settingsIconInNotch = true
+    @State private var windowShadow = true
+    @State private var cornerRadiusScaling = true
+    @State private var simpleCloseAnim = true
+    @State private var coloredSpectrograms = true
+    @State private var playerTinting = true
+    @State private var blurBehindAlbum = true
+    @State private var sliderColorOption = "Match album art"
+    @State private var useSpectrogram = false
 
-    @State private var notchStyle: String = DataStore.shared.string(for: .notchStyle) ?? "melted"
-    @State private var notchHideDelay: Double = DataStore.shared.double(for: .notchHideDelay, default: 1.0)
+    // Battery
+    @State private var showBatteryGeneral1 = true
+    @State private var showBatteryGeneral2 = true
+    @State private var showBatteryInfo1 = true
+    @State private var showBatteryInfo2 = true
 
-    @State private var focusDuration: Int = Int(DataStore.shared.double(for: .pomodoroFocusDuration, default: 25))
-    @State private var shortBreakDuration: Int = Int(DataStore.shared.double(for: .pomodoroShortBreakDuration, default: 5))
-    @State private var longBreakDuration: Int = Int(DataStore.shared.double(for: .pomodoroLongBreakDuration, default: 15))
-    @State private var cyclesBeforeLongBreak: Int = Int(DataStore.shared.double(for: .pomodoroCyclesBeforeLongBreak, default: 4))
+    // Media
+    @State private var musicSource = "Spotify"
+    @State private var showMediaControls = true
+    @State private var liveActivityToggle1 = true
+    @State private var liveActivityToggle2 = true
+    @State private var liveActivityDefault = "Default"
+    @State private var liveActivityDuration = "10 seconds"
+    @State private var hideInFullscreen = "Always hide in fullscreen"
 
-    @State private var spotifyConnected: Bool = DataStore.shared.bool(for: .spotifyEnabled, default: true)
-    @State private var appleMusicConnected: Bool = DataStore.shared.bool(for: .appleMusicEnabled, default: true)
+    // Our existing settings
+    @State private var appearanceMode = DataStore.shared.string(for: .appearanceMode) ?? "dark"
+    @State private var glassEnabled = DataStore.shared.bool(for: .glassmorphismEnabled, default: true)
+    @State private var dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
+    @State private var menuBarVisible = DataStore.shared.bool(for: .menuBarIconVisible, default: true)
+    @State private var notchStyle = DataStore.shared.string(for: .notchStyle) ?? "melted"
+    @State private var notchHideDelay = DataStore.shared.double(for: .notchHideDelay, default: 1.0)
+    @State private var defaultOpacity = DataStore.shared.double(for: .defaultOpacity, default: 1.0)
+    @State private var defaultBlur = DataStore.shared.double(for: .defaultBlur, default: 0.5)
+    @State private var defaultPin = DataStore.shared.bool(for: .defaultPin, default: false)
+    @State private var focusDuration = Int(DataStore.shared.double(for: .pomodoroFocusDuration, default: 25))
+    @State private var shortBreakDuration = Int(DataStore.shared.double(for: .pomodoroShortBreakDuration, default: 5))
+    @State private var longBreakDuration = Int(DataStore.shared.double(for: .pomodoroLongBreakDuration, default: 15))
+    @State private var cyclesBeforeLongBreak = Int(DataStore.shared.double(for: .pomodoroCyclesBeforeLongBreak, default: 4))
+    @State private var spotifyConnected = DataStore.shared.bool(for: .spotifyEnabled, default: true)
+    @State private var appleMusicConnected = DataStore.shared.bool(for: .appleMusicEnabled, default: true)
 
     @State private var hoveredSection: Section?
+    @State private var showMusicSourcePicker = false
 
     enum Section: String, CaseIterable {
+        case general = "General"
         case appearance = "Appearance"
-        case widgets = "Widgets"
-        case notch = "Notch"
-        case timers = "Timers"
+        case battery = "Battery"
+        case media = "Media"
         case connections = "Connections"
+        case timers = "Timers"
         case about = "About"
 
         var icon: String {
             switch self {
+            case .general: return "gearshape"
             case .appearance: return "paintpalette"
-            case .widgets: return "square.grid.2x2"
-            case .notch: return "rectangle.topthird.inset.filled"
-            case .timers: return "timer"
+            case .battery: return "battery.100"
+            case .media: return "music.note"
             case .connections: return "cable.connector"
+            case .timers: return "timer"
             case .about: return "info.circle"
             }
         }
@@ -50,32 +100,23 @@ struct SettingsView: View {
         HStack(spacing: 0) {
             sidebar
                 .layoutPriority(1)
-            Divider()
+            Rectangle().fill(settingsBorder).frame(width: 1)
             contentArea
-                .layoutPriority(0)
         }
-        .frame(minWidth: 580, minHeight: 420)
-        .background(
-            Group {
-                if appSettings.glassmorphismEnabled {
-                    VisualEffectView(material: .sidebar, blendingMode: .behindWindow)
-                } else {
-                    Color(nsColor: .windowBackgroundColor)
-                }
-            }
-        )
+        .frame(minWidth: 620, minHeight: 460)
+        .background(settingsContentBG)
     }
 
     // MARK: - Sidebar
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Aura Settings")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
+            Text("Aura")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
                 .padding(.horizontal, 16)
-                .padding(.top, 20)
-                .padding(.bottom, 16)
+                .padding(.top, 24)
+                .padding(.bottom, 20)
 
             ForEach(Section.allCases, id: \.self) { section in
                 sidebarItem(section)
@@ -85,12 +126,12 @@ struct SettingsView: View {
 
             Text("v1.0.0")
                 .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+                .foregroundColor(settingsSecondaryText)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
         }
         .frame(width: 180)
-        .background(.regularMaterial)
+        .background(settingsSidebarBG)
     }
 
     private func sidebarItem(_ section: Section) -> some View {
@@ -102,24 +143,23 @@ struct SettingsView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: section.icon)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
-                    .frame(width: 18)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(isSelected ? settingsBlue : settingsCyan)
+                    .frame(width: 20)
 
                 Text(section.rawValue)
                     .font(.system(size: 12, weight: isSelected ? .medium : .regular))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .foregroundColor(isSelected ? .white : settingsSecondaryText)
                     .lineLimit(1)
 
                 Spacer()
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isSelected ? Color.primary.opacity(0.12) : (isHovered ? Color.primary.opacity(0.06) : Color.clear))
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? settingsBlue.opacity(0.15) : (isHovered ? Color.white.opacity(0.05) : Color.clear))
             )
-            .animation(.easeOut(duration: 0.15), value: isSelected)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
@@ -134,255 +174,229 @@ struct SettingsView: View {
     private var contentArea: some View {
         Group {
             switch selectedSection {
+            case .general: generalContent
             case .appearance: appearanceContent
-            case .widgets: widgetContent
-            case .notch: notchContent
-            case .timers: timerContent
+            case .battery: batteryContent
+            case .media: mediaContent
             case .connections: connectionsContent
+            case .timers: timerContent
             case .about: aboutContent
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background)
+        .background(settingsContentBG)
+    }
+
+    // MARK: - General
+
+    private var generalContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                headerWithButton("General", buttonTitle: "Quit app")
+
+                // Notch behavior card
+                settingsCard("Notch behavior") {
+                    toggleRow("Extend hover area", value: $extendHoverArea)
+                    dividerRow
+                    toggleRow("Enable haptics", value: $enableHaptics)
+                    dividerRow
+                    toggleRow("Open notch on hover", value: $openNotchOnHover)
+                    dividerRow
+                    toggleRow("Remember last tab", value: $rememberLastTab)
+                    dividerRow
+                    sliderRow("Minimum hover duration", value: $minHoverDuration, range: 0.1...1.0, format: { String(format: "%.1fs", $0) })
+                        .onChange(of: minHoverDuration) { _, nv in DataStore.shared.set(key: .notchHideDelay, value: nv) }
+                }
+
+                // Gesture control card
+                settingsCard("Gesture control", badge: "Beta") {
+                    toggleRow("Enable gestures", value: $enableGestures)
+                    dividerRow
+                    toggleRow("Media change with horizontal gestures", value: $mediaHorizontalGestures)
+                    dividerRow
+                    toggleRow("Close gesture", value: $closeGesture)
+                    dividerRow
+                    sliderRow("Gesture sensitivity", value: $gestureSensitivity, range: 0...1, format: { v in v < 0.33 ? "Low" : v < 0.66 ? "Medium" : "High" })
+                }
+
+                footerText("Two-finger swipe up on notch to close, two-finger swipe down on notch to open when Open notch on hover option is disabled")
+            }
+            .padding(20)
+        }
     }
 
     // MARK: - Appearance
 
     private var appearanceContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                sectionHeader("Theme")
+            VStack(alignment: .leading, spacing: 16) {
+                headerText("Appearance")
 
-                VStack(alignment: .leading, spacing: 12) {
-                    settingsLabel("Appearance Mode")
-                    Picker("", selection: $appearanceMode) {
-                        Text("Dark").tag("dark")
-                        Text("Light").tag("light")
-                        Text("System").tag("system")
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: appearanceMode) { _, newValue in
-                        DataStore.shared.set(key: .appearanceMode, value: newValue)
-                        switch newValue {
-                        case "light":
-                            NSApp.appearance = NSAppearance(named: .aqua)
-                        case "dark":
-                            NSApp.appearance = NSAppearance(named: .darkAqua)
-                        default:
-                            NSApp.appearance = nil
+                // Custom - Theme
+                settingsCard("Theme") {
+                    HStack {
+                        Text("Appearance Mode").foregroundColor(.white).font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $appearanceMode) {
+                            Text("Dark").tag("dark")
+                            Text("Light").tag("light")
+                            Text("System").tag("system")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 200)
+                        .onChange(of: appearanceMode) { _, nv in
+                            DataStore.shared.set(key: .appearanceMode, value: nv)
+                            NSApp.appearance = nv == "dark" ? NSAppearance(named: .darkAqua) : nv == "light" ? NSAppearance(named: .aqua) : nil
                         }
                     }
+                    dividerRow
+                    toggleRow("Glassmorphism Effect", value: $glassEnabled)
+                        .onChange(of: glassEnabled) { _, nv in AppSettingsManager.shared.saveAndNotify(glassmorphism: nv) }
+                    dividerRow
+                    toggleRow("Show in Dock", value: $dockVisible)
+                        .onChange(of: dockVisible) { _, nv in
+                            DataStore.shared.set(key: .dockVisible, value: nv)
+                            if nv { NSApp.setActivationPolicy(.regular); NSApp.activate(ignoringOtherApps: true) }
+                        }
+                    dividerRow
+                    toggleRow("Show Menu Bar Icon", value: $menuBarVisible)
+                        .onChange(of: menuBarVisible) { _, nv in
+                            DataStore.shared.set(key: .menuBarIconVisible, value: nv)
+                            MenuBarManager.shared.toggleIconVisibility(nv)
+                        }
                 }
 
-                Divider()
-
-                sectionHeader("Effects")
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $glassEnabled) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Glassmorphism Effect")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("Frosted glass background on widgets and menus")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: glassEnabled) { _, newValue in
-                        AppSettingsManager.shared.saveAndNotify(glassmorphism: newValue)
-                    }
+                // General panel (Boring Notch style)
+                settingsCard("General") {
+                    toggleRow("Always show tabs", value: $showTabs)
+                    dividerRow
+                    toggleRow("Settings icon in notch", value: $settingsIconInNotch)
+                    dividerRow
+                    toggleRow("Enable window shadow", value: $windowShadow)
+                    dividerRow
+                    toggleRow("Corner radius scaling", value: $cornerRadiusScaling)
+                    dividerRow
+                    toggleRow("Use simpler close animation", value: $simpleCloseAnim)
                 }
 
-                Divider()
+                // Media panel
+                settingsCard("Media") {
+                    toggleRow("Enable colored spectrograms", value: $coloredSpectrograms)
+                    dividerRow
+                    toggleRow("Player tinting", value: $playerTinting)
+                    dividerRow
+                    toggleRow("Enable blur effect behind album art", value: $blurBehindAlbum)
+                    dividerRow
+                    chevronRow("Slider color", value: $sliderColorOption)
+                }
 
-                sectionHeader("Visibility")
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $dockVisible) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Show in Dock")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("Display Aura icon in the macOS Dock")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: dockVisible) { _, newValue in
-                        DataStore.shared.set(key: .dockVisible, value: newValue)
-                        if newValue {
-                            NSApp.setActivationPolicy(.regular)
-                            NSApp.activate(ignoringOtherApps: true)
-                        }
-                    }
-
-                    Toggle(isOn: $menuBarVisible) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Show Menu Bar Icon")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("Show Aura icon in the menu bar")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: menuBarVisible) { _, newValue in
-                        DataStore.shared.set(key: .menuBarIconVisible, value: newValue)
-                        MenuBarManager.shared.toggleIconVisibility(newValue)
-                    }
+                // Custom music live activity animation
+                settingsCard("Custom music live activity animation", badge: "Coming soon") {
+                    toggleRow("Use music visualizer spectrogram", value: $useSpectrogram)
                 }
             }
-            .padding(24)
+            .padding(20)
         }
     }
 
-    // MARK: - Widgets
+    // MARK: - Battery
 
-    private var widgetContent: some View {
+    private var batteryContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                sectionHeader("Default Widget Appearance")
+            VStack(alignment: .leading, spacing: 16) {
+                headerText("Battery")
 
-                VStack(alignment: .leading, spacing: 16) {
-                    sliderRow(
-                        label: "Window Opacity",
-                        description: "Overall transparency of widget windows",
-                        value: $defaultOpacity,
-                        range: 0.3...1.0,
-                        onChange: { DataStore.shared.set(key: .defaultOpacity, value: $0) }
-                    )
-
-                    sliderRow(
-                        label: "Backdrop Blur",
-                        description: "Frosted glass blur intensity on widget backgrounds",
-                        value: $defaultBlur,
-                        range: 0.0...1.0,
-                        onChange: { DataStore.shared.set(key: .defaultBlur, value: $0) }
-                    )
+                settingsCard("General") {
+                    toggleRow("Show battery in notch", value: $showBatteryGeneral1)
+                    dividerRow
+                    toggleRow("Show percentage", value: $showBatteryGeneral2)
                 }
 
-                Divider()
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle(isOn: $defaultPin) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Pin by Default")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("New widgets appear above all other windows")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: defaultPin) { _, newValue in
-                        DataStore.shared.set(key: .defaultPin, value: newValue)
-                    }
+                settingsCard("Battery Information") {
+                    toggleRow("Show charging indicator", value: $showBatteryInfo1)
+                    dividerRow
+                    toggleRow("Show time remaining", value: $showBatteryInfo2)
                 }
             }
-            .padding(24)
+            .padding(20)
         }
     }
 
-    // MARK: - Notch
+    // MARK: - Media
 
-    private var notchContent: some View {
+    private var mediaContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                sectionHeader("Notch Bar")
+            VStack(alignment: .leading, spacing: 16) {
+                headerText("Media")
 
-                VStack(alignment: .leading, spacing: 12) {
-                    settingsLabel("Style")
-                    Picker("", selection: $notchStyle) {
-                        Text("Melted Drop").tag("melted")
-                        Text("Rounded Pill").tag("pill")
-                    }
-                    .pickerStyle(.radioGroup)
-                    .onChange(of: notchStyle) { _, newValue in
-                        AppSettingsManager.shared.saveAndNotify(notchStyle: newValue)
-                    }
-                }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 8) {
-                    settingsLabel("Auto-Hide Delay: \(String(format: "%.1f", notchHideDelay))s")
-                    Slider(value: $notchHideDelay, in: 0.5...3.0, step: 0.1)
-                        .onChange(of: notchHideDelay) { _, newValue in
-                            DataStore.shared.set(key: .notchHideDelay, value: newValue)
+                // Media Source
+                settingsCard("Media Source") {
+                    VStack(spacing: 4) {
+                        Button {
+                            showMusicSourcePicker.toggle()
+                        } label: {
+                            HStack {
+                                Text("Music Source").foregroundColor(.white).font(.system(size: 12))
+                                Spacer()
+                                Text(musicSource).foregroundColor(settingsSecondaryText).font(.system(size: 12))
+                                Image(systemName: "chevron.up.down").foregroundColor(settingsSecondaryText).font(.system(size: 9))
+                            }
                         }
-                    Text("How long the notch stays visible after your cursor leaves")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .topTrailing) {
+                            if showMusicSourcePicker {
+                                VStack(spacing: 0) {
+                                    ForEach(["Spotify", "Apple Music", "Local Files", "System Audio"], id: \.self) { src in
+                                        Button {
+                                            musicSource = src
+                                            showMusicSourcePicker = false
+                                        } label: {
+                                            HStack {
+                                                Text(src).foregroundColor(.white).font(.system(size: 12))
+                                                Spacer()
+                                                if src == musicSource {
+                                                    Image(systemName: "checkmark").foregroundColor(.white).font(.system(size: 10))
+                                                }
+                                            }
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(src == musicSource ? settingsBlue.opacity(0.3) : Color.clear)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                .frame(width: 160)
+                                .background(settingsCardBG)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(settingsBorder))
+                                .shadow(color: .black.opacity(0.3), radius: 8)
+                                .offset(x: 0, y: 28)
+                            }
+                        }
+                        Text("Select which music service to display in the notch")
+                            .font(.system(size: 10)).foregroundColor(settingsSecondaryText)
+                    }
                 }
 
-                Divider()
-
-                sectionHeader("Music Integration")
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Spotify", isOn: .constant(false))
-                        .disabled(true)
-                    Toggle("Apple Music", isOn: .constant(false))
-                        .disabled(true)
-                    Text("Music app integration coming soon")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                // Media Controls
+                settingsCard("Media controls", badge: "Beta") {
+                    toggleRow("Show media controls in notch", value: $showMediaControls)
                 }
-            }
-            .padding(24)
-        }
-    }
 
-    // MARK: - Timers
-
-    private var timerContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                sectionHeader("Pomodoro Timer")
-
-                VStack(alignment: .leading, spacing: 16) {
-                    pickerRow(
-                        label: "Focus Duration",
-                        description: "Length of each focus session",
-                        value: $focusDuration,
-                        options: [
-                            (15, "15 min"), (20, "20 min"), (25, "25 min"),
-                            (30, "30 min"), (45, "45 min"), (50, "50 min"), (60, "60 min")
-                        ],
-                        onChange: { DataStore.shared.set(key: .pomodoroFocusDuration, value: Double($0)) }
-                    )
-
-                    pickerRow(
-                        label: "Short Break",
-                        description: "Break between focus sessions",
-                        value: $shortBreakDuration,
-                        options: [(3, "3 min"), (5, "5 min"), (10, "10 min")],
-                        onChange: { DataStore.shared.set(key: .pomodoroShortBreakDuration, value: Double($0)) }
-                    )
-
-                    pickerRow(
-                        label: "Long Break",
-                        description: "Extended break after several cycles",
-                        value: $longBreakDuration,
-                        options: [(10, "10 min"), (15, "15 min"), (20, "20 min"), (30, "30 min")],
-                        onChange: { DataStore.shared.set(key: .pomodoroLongBreakDuration, value: Double($0)) }
-                    )
-
-                    pickerRow(
-                        label: "Cycles Before Long Break",
-                        description: "Number of focus sessions before a long break",
-                        value: $cyclesBeforeLongBreak,
-                        options: [(2, "2"), (3, "3"), (4, "4"), (5, "5")],
-                        onChange: { DataStore.shared.set(key: .pomodoroCyclesBeforeLongBreak, value: Double($0)) }
-                    )
+                // Live Activity
+                settingsCard("Live activity") {
+                    toggleRow("Show now playing", value: $liveActivityToggle1)
+                    dividerRow
+                    toggleRow("Show playback progress", value: $liveActivityToggle2)
+                    dividerRow
+                    chevronRow("Default view", value: $liveActivityDefault)
+                    dividerRow
+                    chevronRow("Hide after", value: $liveActivityDuration)
+                    dividerRow
+                    chevronRow("Fullscreen behavior", value: $hideInFullscreen, badge: "Beta")
                 }
             }
-            .padding(24)
+            .padding(20)
         }
     }
 
@@ -390,156 +404,272 @@ struct SettingsView: View {
 
     private var connectionsContent: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                sectionHeader("Music Integrations")
+            VStack(alignment: .leading, spacing: 16) {
+                headerText("Connections")
 
-                VStack(alignment: .leading, spacing: 16) {
-                    Toggle(isOn: $spotifyConnected) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Spotify")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("Show Spotify now playing in the notch")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: spotifyConnected) { _, newValue in
-                        MediaTracker.shared.setSpotifyConnected(newValue)
-                    }
-
-                    Toggle(isOn: $appleMusicConnected) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Apple Music")
-                                .font(.system(size: 12, weight: .medium))
-                            Text("Show Apple Music now playing in the notch")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .onChange(of: appleMusicConnected) { _, newValue in
-                        MediaTracker.shared.setAppleMusicConnected(newValue)
-                    }
+                settingsCard("Music Integrations") {
+                    toggleRow("Spotify", value: $spotifyConnected)
+                        .onChange(of: spotifyConnected) { _, nv in MediaTracker.shared.setSpotifyConnected(nv) }
+                    dividerRow
+                    toggleRow("Apple Music", value: $appleMusicConnected)
+                        .onChange(of: appleMusicConnected) { _, nv in MediaTracker.shared.setAppleMusicConnected(nv) }
                 }
 
-                Divider()
-
-                sectionHeader("Browser Support")
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Now Playing works automatically with:")
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.secondary)
-
+                settingsCard("Browser Support") {
                     VStack(alignment: .leading, spacing: 4) {
-                        Label("Safari", systemImage: "checkmark.circle.fill")
-                        Label("Chrome", systemImage: "checkmark.circle.fill")
-                        Label("Brave", systemImage: "checkmark.circle.fill")
-                        Label("Edge", systemImage: "checkmark.circle.fill")
-                        Label("Opera", systemImage: "checkmark.circle.fill")
-                        Label("Vivaldi", systemImage: "checkmark.circle.fill")
+                        ForEach(["Safari", "Chrome", "Brave", "Edge", "Opera", "Vivaldi"], id: \.self) { browser in
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill").foregroundColor(.green).font(.system(size: 10))
+                                Text(browser).foregroundColor(.white).font(.system(size: 11))
+                            }
+                            if browser != "Vivaldi" {
+                                Rectangle().fill(settingsBorder).frame(height: 1).padding(.leading, 16)
+                            }
+                        }
                     }
-                    .font(.system(size: 11))
-                    .foregroundStyle(.primary)
-                    .padding(.leading, 4)
                 }
 
-                Divider()
-
-                sectionHeader("How It Works")
-
-                Text("Aura detects media playback from connected apps using macOS Now Playing. Any app that reports now playing information will automatically appear in the Aura notch.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(4)
+                settingsCard("How It Works") {
+                    Text("Aura detects media playback from connected apps using macOS Now Playing. Any app that reports now playing information will automatically appear in the Aura notch.")
+                        .font(.system(size: 11))
+                        .foregroundColor(settingsSecondaryText)
+                        .lineSpacing(4)
+                }
             }
-            .padding(24)
+            .padding(20)
+        }
+    }
+
+    // MARK: - Timers
+
+    private var timerContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                headerText("Timers")
+
+                settingsCard("Pomodoro Timer") {
+                    VStack(spacing: 12) {
+                        timerPickerRow("Focus Duration", value: $focusDuration, options: [(15, "15 min"), (20, "20 min"), (25, "25 min"), (30, "30 min"), (45, "45 min"), (50, "50 min"), (60, "60 min")])
+                            .onChange(of: focusDuration) { _, nv in DataStore.shared.set(key: .pomodoroFocusDuration, value: Double(nv)) }
+                        Rectangle().fill(settingsBorder).frame(height: 1)
+                        timerPickerRow("Short Break", value: $shortBreakDuration, options: [(3, "3 min"), (5, "5 min"), (10, "10 min")])
+                            .onChange(of: shortBreakDuration) { _, nv in DataStore.shared.set(key: .pomodoroShortBreakDuration, value: Double(nv)) }
+                        Rectangle().fill(settingsBorder).frame(height: 1)
+                        timerPickerRow("Long Break", value: $longBreakDuration, options: [(10, "10 min"), (15, "15 min"), (20, "20 min"), (30, "30 min")])
+                            .onChange(of: longBreakDuration) { _, nv in DataStore.shared.set(key: .pomodoroLongBreakDuration, value: Double(nv)) }
+                        Rectangle().fill(settingsBorder).frame(height: 1)
+                        timerPickerRow("Cycles", value: $cyclesBeforeLongBreak, options: [(2, "2"), (3, "3"), (4, "4"), (5, "5")])
+                            .onChange(of: cyclesBeforeLongBreak) { _, nv in DataStore.shared.set(key: .pomodoroCyclesBeforeLongBreak, value: Double(nv)) }
+                    }
+                }
+
+                if #available(macOS 14.0, *) {
+                    settingsCard("Widget Defaults") {
+                        opacitySliderRow("Window Opacity", value: $defaultOpacity, onChange: { DataStore.shared.set(key: .defaultOpacity, value: $0) })
+                        Rectangle().fill(settingsBorder).frame(height: 1)
+                        opacitySliderRow("Backdrop Blur", value: $defaultBlur, onChange: { DataStore.shared.set(key: .defaultBlur, value: $0) })
+                        Rectangle().fill(settingsBorder).frame(height: 1)
+                        toggleRow("Pin by Default", value: $defaultPin)
+                            .onChange(of: defaultPin) { _, nv in DataStore.shared.set(key: .defaultPin, value: nv) }
+                    }
+                }
+            }
+            .padding(20)
         }
     }
 
     // MARK: - About
 
     private var aboutContent: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 48, weight: .semibold))
-                .foregroundStyle(.primary.opacity(0.6))
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    headerWithButton("About", buttonTitle: "Check for Updates...")
 
-            Text("Aura")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(.primary)
+                    settingsCard(nil) {
+                        HStack {
+                            Text("Version").foregroundColor(settingsSecondaryText).font(.system(size: 12))
+                            Spacer()
+                            Text("Aura").foregroundColor(settingsSecondaryText).font(.system(size: 12))
+                        }
+                        Rectangle().fill(settingsBorder).frame(height: 1)
+                        HStack {
+                            Text("Build").foregroundColor(settingsSecondaryText).font(.system(size: 12))
+                            Spacer()
+                            Text("1.0.0").foregroundColor(settingsSecondaryText).font(.system(size: 12))
+                        }
+                    }
 
-            Text("v1.0.0")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.secondary)
+                    settingsCard("Software updates") {
+                        toggleRow("Check automatically", value: .constant(false))
+                        Rectangle().fill(settingsBorder).frame(height: 1)
+                        toggleRow("Download beta versions", value: .constant(false))
+                    }
 
-            Text("A minimal, glassmorphic command center for macOS.")
-                .font(.system(size: 11, weight: .regular))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                    settingsCard(nil) {
+                        HStack {
+                            Image(systemName: "cup.and.saucer.fill").foregroundColor(.white).font(.system(size: 12))
+                            Text("Support Us").foregroundColor(.white).font(.system(size: 12))
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundColor(settingsSecondaryText).font(.system(size: 10))
+                        }
+                        .padding(.vertical, 2)
+                        Rectangle().fill(settingsBorder).frame(height: 1)
+                        HStack {
+                            Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundColor(.white).font(.system(size: 12))
+                            Text("GitHub").foregroundColor(.white).font(.system(size: 12))
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundColor(settingsSecondaryText).font(.system(size: 10))
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .padding(20)
+            }
 
+            // Footer
+            HStack {
+                Spacer()
+                Text("Made with 🫶🏻 by Aura")
+                    .font(.system(size: 10))
+                    .foregroundColor(settingsSecondaryText)
+                Spacer()
+            }
+            .padding(.vertical, 10)
+            .background(settingsCardBG)
+        }
+    }
+
+    // MARK: - Reusable Components
+
+    private func headerText(_ text: String) -> some View {
+        HStack {
+            Text(text).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
             Spacer()
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Shared Components
-
-    private func sectionHeader(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
-            .textCase(.uppercase)
-    }
-
-    private func settingsLabel(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.primary)
-    }
-
-    private func sliderRow(label: String, description: String, value: Binding<Double>, range: ClosedRange<Double>, onChange: @escaping (Double) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(label)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.primary)
-                Spacer()
-                Text("\(Int(value.wrappedValue * 100))%")
-                    .font(.system(size: 11, weight: .regular, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            Slider(value: value, in: range)
-                .onChange(of: value.wrappedValue) { _, newValue in
-                    onChange(newValue)
-                }
-            Text(description)
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
+    private func headerWithButton(_ text: String, buttonTitle: String) -> some View {
+        HStack {
+            Text(text).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
+            Spacer()
+            Text(buttonTitle)
+                .font(.system(size: 11))
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(settingsBorder)
+                )
         }
     }
 
-    private func pickerRow(label: String, description: String, value: Binding<Int>, options: [(Int, String)], onChange: @escaping (Int) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.primary)
+    private func settingsCard(_ title: String?, badge: String? = nil, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let title {
+                HStack(spacing: 6) {
+                    Text(title).font(.system(size: 11, weight: .semibold)).foregroundColor(settingsSecondaryText).textCase(.uppercase)
+                    if let badge {
+                        Text(badge).font(.system(size: 9, weight: .medium)).foregroundColor(settingsSecondaryText)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(settingsBadgeBG)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                    Spacer()
+                }
+                .padding(.bottom, 8)
+            }
+            VStack(spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(settingsCardBG)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(settingsBorder))
+        }
+    }
+
+    private var dividerRow: some View {
+        Rectangle().fill(settingsBorder).frame(height: 1).padding(.vertical, 1)
+    }
+
+    private func toggleRow(_ label: String, value: Binding<Bool>) -> some View {
+        HStack {
+            Text(label).foregroundColor(.white).font(.system(size: 12))
+            Spacer()
+            Toggle("", isOn: value)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .tint(settingsBlue)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func chevronRow(_ label: String, value: Binding<String>, badge: String? = nil) -> some View {
+        HStack(spacing: 6) {
+            Text(label).foregroundColor(.white).font(.system(size: 12))
+            if let badge {
+                Text(badge).font(.system(size: 9, weight: .medium)).foregroundColor(settingsSecondaryText)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(settingsBadgeBG)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            Spacer()
+            Text(value.wrappedValue).foregroundColor(settingsSecondaryText).font(.system(size: 12))
+            Image(systemName: "chevron.up.down").foregroundColor(settingsSecondaryText).font(.system(size: 8))
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func sliderRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>, format: @escaping (Double) -> String) -> some View {
+        HStack {
+            Text(label).foregroundColor(.white).font(.system(size: 12))
+            Spacer()
+            Text(format(value.wrappedValue)).foregroundColor(settingsSecondaryText).font(.system(size: 11))
+            Slider(value: value, in: range)
+                .tint(settingsBlue)
+                .controlSize(.small)
+                .frame(width: 100)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func opacitySliderRow(_ label: String, value: Binding<Double>, onChange: @escaping (Double) -> Void) -> some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(label).foregroundColor(.white).font(.system(size: 12))
+                Spacer()
+                Text("\(Int(value.wrappedValue * 100))%").foregroundColor(settingsSecondaryText).font(.system(size: 11, design: .monospaced))
+            }
+            Slider(value: value, in: 0.3...1.0).tint(settingsBlue).controlSize(.small)
+                .onChange(of: value.wrappedValue) { _, nv in onChange(nv) }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func timerPickerRow(_ label: String, value: Binding<Int>, options: [(Int, String)]) -> some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(label).foregroundColor(.white).font(.system(size: 12))
+                Spacer()
+            }
             Picker("", selection: value) {
-                ForEach(options, id: \.0) { option in
-                    Text(option.1).tag(option.0)
+                ForEach(options, id: \.0) { opt in
+                    Text(opt.1).tag(opt.0).foregroundColor(.white)
                 }
             }
             .pickerStyle(.segmented)
-            .onChange(of: value.wrappedValue) { _, newValue in
-                onChange(newValue)
-            }
-            Text(description)
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
         }
+        .padding(.vertical, 4)
+    }
+
+    private func footerText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10))
+            .foregroundColor(settingsSecondaryText)
+            .lineSpacing(3)
+            .padding(.top, 4)
     }
 }

@@ -23,6 +23,8 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
             button.image = image
             button.action = #selector(togglePopover)
             button.target = self
+            let visible = DataStore.shared.bool(for: .menuBarIconVisible, default: true)
+            button.isHidden = !visible
         }
 
         let hostingController = NSHostingController(rootView: MenuBarView(viewModel: viewModel))
