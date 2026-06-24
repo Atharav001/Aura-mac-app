@@ -1,5 +1,23 @@
 import Foundation
 
+// SwiftData Migration Guide
+// -------------------------
+// SwiftData @Model macro requires full Xcode (Command Line Tools cannot resolve
+// SwiftDataMacros plugin). To migrate when Xcode is available:
+//
+// 1. Add 'import SwiftData' and 'import SwiftUI' to the target
+// 2. Add '.modelContainer(for: [TodoItem.self, AppSettings.self])' to the WindowGroup
+//    or Scene in AuraApp.swift
+// 3. Replace 'struct TodoItem: Codable' with '@Model class TodoItem' and add
+//    '@Attribute(.unique) var id: UUID'
+// 4. Replace 'struct AppSettings: Codable' with '@Model class AppSettings'
+// 5. Replace DataStore.shared usage with @Environment(\.modelContext) or
+//    ModelContainer.shared.mainContext
+// 6. Use FetchDescriptor / Predicate macros for queries
+// 7. The JSON file at ~/Library/Application Support/aura_data.json can be migrated
+//    by reading it one last time via DataStore.load() and inserting into the model
+//    context via ModelContainer
+
 final class DataStore: @unchecked Sendable {
     static let shared = DataStore()
 

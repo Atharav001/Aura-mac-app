@@ -27,10 +27,14 @@ struct WidgetContainer<Content: View>: View {
         .background(WindowAccessor { window in
             panelWindow = window
             window?.alphaValue = viewModel.opacity
+            window?.level = viewModel.isPinned ? .statusBar : .floating
         })
         .glassmorphic(opacity: blurIntensity * 0.35)
         .onChange(of: viewModel.opacity) { _, newValue in
             panelWindow?.alphaValue = newValue
+        }
+        .onChange(of: viewModel.isPinned) { _, isPinned in
+            panelWindow?.level = isPinned ? .statusBar : .floating
         }
     }
 
@@ -48,6 +52,28 @@ struct WidgetContainer<Content: View>: View {
                 value: $blurIntensity,
                 range: 0.0...1.0
             )
+            HStack {
+                Button {
+                    viewModel.isPinned.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: viewModel.isPinned ? "pin.fill" : "pin")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(viewModel.isPinned ? "Pinned" : "Pin Widget")
+                            .font(.system(size: 10, weight: .regular))
+                    }
+                    .foregroundStyle(viewModel.isPinned ? .blue.opacity(0.7) : .white.opacity(0.4))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(viewModel.isPinned ? .blue.opacity(0.15) : .white.opacity(0.05))
+                    )
+                }
+                .buttonStyle(.plain)
+                .help(viewModel.isPinned ? "Unpin widget" : "Pin widget above all windows")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

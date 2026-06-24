@@ -1,5 +1,5 @@
 import AppKit
-import Foundation
+import MediaPlayer
 
 final class MediaTracker: @unchecked Sendable {
     static let shared = MediaTracker()
@@ -18,8 +18,8 @@ final class MediaTracker: @unchecked Sendable {
     private var lastInfo: NowPlayingInfo?
 
     func startTracking() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.poll()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.pollLocalPlayback()
         }
     }
 
@@ -28,47 +28,41 @@ final class MediaTracker: @unchecked Sendable {
         timer = nil
     }
 
-    private func poll() {
-        fetchViaMediaRemote { [weak self] info in
-            guard let self else { return }
+    private func pollLocalPlayback() {
+        Task { @MainActor in
+            let manager = LocalAudioManager.shared
+            let info: NowPlayingInfo?
+            if let url = manager.currentURL {
+                info = NowPlayingInfo(
+                    title: url.deletingPathExtension().lastPathComponent,
+                    artist: "Local File",
+                    duration: manager.duration,
+                    elapsedTime: manager.currentTime,
+                    isPlaying: manager.isPlaying
+                )
+            } else {
+                info = nil
+            }
+
             if info != self.lastInfo {
                 self.lastInfo = info
-                DispatchQueue.main.async {
-                    self.onUpdate?(info)
-                }
+                self.publishToSystem(info)
+                self.onUpdate?(info)
             }
         }
     }
 
-    private func fetchViaMediaRemote(completion: @escaping (NowPlayingInfo?) -> Void) {
-        guard let handle = dlopen(
-            "/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote",
-            RTLD_LAZY
-        ) else {
-            completion(nil)
+    private func publishToSystem(_ info: NowPlayingInfo?) {
+        guard let info else {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             return
         }
-        defer { dlclose(handle) }
-
-        guard let sym = dlsym(handle, "MRMediaRemoteGetNowPlayingInfo") else {
-            completion(nil)
-            return
-        }
-
-        let fn = unsafeBitCast(
-            sym,
-            to: (@convention(c) (DispatchQueue, @escaping ([String: Any]?) -> Void) -> Void).self
-        )
-        fn(DispatchQueue.main) { dict in
-            guard let dict else { completion(nil); return }
-            let info = NowPlayingInfo(
-                title: dict["kMRMediaRemoteNowPlayingInfoTitle"] as? String ?? "Unknown",
-                artist: dict["kMRMediaRemoteNowPlayingInfoArtist"] as? String ?? "Unknown",
-                duration: dict["kMRMediaRemoteNowPlayingInfoDuration"] as? Double ?? 0,
-                elapsedTime: dict["kMRMediaRemoteNowPlayingInfoElapsedTime"] as? Double ?? 0,
-                isPlaying: (dict["kMRMediaRemoteNowPlayingInfoPlaybackRate"] as? Double ?? 0) > 0
-            )
-            completion(info)
-        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+            MPMediaItemPropertyTitle: info.title,
+            MPMediaItemPropertyArtist: info.artist,
+            MPMediaItemPropertyPlaybackDuration: info.duration,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: info.elapsedTime,
+            MPNowPlayingInfoPropertyPlaybackRate: info.isPlaying ? 1.0 : 0.0
+        ]
     }
 }

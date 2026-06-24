@@ -1,15 +1,21 @@
 import SwiftUI
 
 struct AudioPlayerView: View {
-    let url: URL
+    let playlist: [URL]
+    @State private var currentIndex: Int
     @State private var isPlaying = false
     @State private var currentTime: TimeInterval = 0
     @State private var duration: TimeInterval = 0
     private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
+    init(playlist: [URL], currentIndex: Int) {
+        self.playlist = playlist
+        self._currentIndex = State(initialValue: currentIndex)
+    }
+
     var body: some View {
         VStack(spacing: 8) {
-            Text(url.lastPathComponent)
+            Text(playlist[safe: currentIndex]?.lastPathComponent ?? "Unknown")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.white)
                 .lineLimit(1)
@@ -25,14 +31,34 @@ struct AudioPlayerView: View {
                 Spacer()
 
                 Button {
+                    previousTrack()
+                } label: {
+                    Image(systemName: "backward.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white)
+                }
+                .buttonStyle(.plain)
+                .disabled(playlist.count <= 1)
+
+                Button {
                     LocalAudioManager.shared.togglePlayPause()
                     isPlaying = LocalAudioManager.shared.isPlaying
                 } label: {
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 14))
                         .foregroundColor(.white)
                 }
                 .buttonStyle(.plain)
+
+                Button {
+                    nextTrack()
+                } label: {
+                    Image(systemName: "forward.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white)
+                }
+                .buttonStyle(.plain)
+                .disabled(playlist.count <= 1)
 
                 Spacer()
 
@@ -44,13 +70,7 @@ struct AudioPlayerView: View {
         .padding(12)
         .glassmorphic(opacity: 0.12, material: .sidebar)
         .onAppear {
-            LocalAudioManager.shared.play(url: url)
-            duration = LocalAudioManager.shared.duration
-            isPlaying = true
-            LocalAudioManager.shared.onPlaybackEnded = {
-                isPlaying = false
-                currentTime = 0
-            }
+            playCurrent()
         }
         .onReceive(timer) { _ in
             guard LocalAudioManager.shared.isPlaying else { return }
@@ -58,6 +78,29 @@ struct AudioPlayerView: View {
             duration = LocalAudioManager.shared.duration
             isPlaying = true
         }
+    }
+
+    private func playCurrent() {
+        guard let url = playlist[safe: currentIndex] else { return }
+        LocalAudioManager.shared.play(url: url)
+        duration = LocalAudioManager.shared.duration
+        currentTime = 0
+        isPlaying = true
+        LocalAudioManager.shared.onPlaybackEnded = { [self] in
+            nextTrack()
+        }
+    }
+
+    private func nextTrack() {
+        guard playlist.count > 1 else { return }
+        currentIndex = (currentIndex + 1) % playlist.count
+        playCurrent()
+    }
+
+    private func previousTrack() {
+        guard playlist.count > 1 else { return }
+        currentIndex = (currentIndex - 1 + playlist.count) % playlist.count
+        playCurrent()
     }
 
     @ViewBuilder
@@ -83,5 +126,11 @@ struct AudioPlayerView: View {
         let m = Int(time) / 60
         let s = Int(time) % 60
         return String(format: "%d:%02d", m, s)
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

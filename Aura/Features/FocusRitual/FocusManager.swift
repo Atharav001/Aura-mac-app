@@ -37,7 +37,6 @@ final class FocusManager: @unchecked Sendable {
         guard !viewModel.isActive else { return }
         showOverlay()
         viewModel.startFocus()
-        enableDoNotDisturb()
     }
 
     func stopFocus() {
@@ -45,12 +44,10 @@ final class FocusManager: @unchecked Sendable {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
             self?.hideOverlay()
         }
-        disableDoNotDisturb()
     }
 
     private func showOverlay() {
         guard overlayPanel == nil else { return }
-
         guard let screen = NSScreen.main else { return }
         let hostingView = NSHostingView(rootView: FocusOverlay(viewModel: viewModel))
         hostingView.translatesAutoresizingMaskIntoConstraints = false
@@ -81,21 +78,5 @@ final class FocusManager: @unchecked Sendable {
     private func hideOverlay() {
         overlayPanel?.close()
         overlayPanel = nil
-    }
-
-    private func enableDoNotDisturb() {
-        DistributedNotificationCenter.default().post(
-            name: Notification.Name("com.apple.notificationcenter.dndprefs_changed"),
-            object: nil,
-            userInfo: ["state": 1]
-        )
-    }
-
-    private func disableDoNotDisturb() {
-        DistributedNotificationCenter.default().post(
-            name: Notification.Name("com.apple.notificationcenter.dndprefs_changed"),
-            object: nil,
-            userInfo: ["state": 0]
-        )
     }
 }
