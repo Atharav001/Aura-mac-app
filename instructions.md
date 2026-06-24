@@ -32,8 +32,10 @@ Aura/
 │   │   └── NotchManager/     # Logic for detecting screen notch and sizing
 │   │       └── NotchDetector.swift
 │   ├── Features/
-│   │   ├── MenuBar/          # Menu Bar dropdown logic
-│   │   │   └── MenuBarView.swift
+│   │   ├── MenuBar/          # Menu bar NSStatusItem + NSPopover
+│   │   │   ├── MenuBarManager.swift  # NSStatusItem + NSPopover controller
+│   │   │   ├── MenuBarViewModel.swift # @Observable state (directory, mp3s)
+│   │   │   └── MenuBarView.swift     # Glassmorphic SwiftUI dropdown
 │   │   ├── DynamicIsland/    # The notch UI and logic
 │   │   │   ├── NotchView.swift       # The main expanding view
 │   │   │   ├── NotchViewModel.swift  # @Observable class for hover, expand, swipe
@@ -42,7 +44,8 @@ Aura/
 │   │   │   ├── PomodoroWidget.swift
 │   │   │   ├── TodoWidget.swift
 │   │   │   ├── StopwatchWidget.swift
-│   │   │   └── WidgetContainer.swift # Shared wrapper for opacity/blur sliders
+│   │   │   ├── WidgetContainer.swift # Shared wrapper for opacity/blur sliders
+│   │   │   └── WidgetState.swift     # @Observable state for opacity, pin, present
 │   │   ├── AudioPlayer/      # Local MP3 player logic
 │   │   │   ├── LocalAudioManager.swift
 │   │   │   └── AudioPlayerView.swift

@@ -2,26 +2,22 @@ import SwiftUI
 
 struct GlassmorphicModifier: ViewModifier {
     let opacity: Double
-    let blurRadius: CGFloat
+    let material: NSVisualEffectView.Material
 
-    init(opacity: Double = 0.15, blurRadius: CGFloat = 30) {
+    init(opacity: Double = 0.15, material: NSVisualEffectView.Material = .sidebar) {
         self.opacity = opacity
-        self.blurRadius = blurRadius
+        self.material = material
     }
 
     func body(content: Content) -> some View {
         content
             .background(
-                VisualEffectView(material: .ultraDark, blendingMode: .withinWindow)
+                VisualEffectView(material: material, blendingMode: .withinWindow)
                     .opacity(opacity)
-            )
-            .background(
-                .regularMaterial,
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(.white.opacity(0.1), lineWidth: 0.5)
+                    .stroke(.white.opacity(0.06), lineWidth: 0.5)
             )
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -37,6 +33,8 @@ struct VisualEffectView: NSViewRepresentable {
         view.blendingMode = blendingMode
         view.state = .active
         view.wantsLayer = true
+        view.layer?.cornerRadius = 16
+        view.layer?.cornerCurve = .continuous
         return view
     }
 
@@ -47,7 +45,10 @@ struct VisualEffectView: NSViewRepresentable {
 }
 
 extension View {
-    func glassmorphic(opacity: Double = 0.15, blurRadius: CGFloat = 30) -> some View {
-        modifier(GlassmorphicModifier(opacity: opacity, blurRadius: blurRadius))
+    func glassmorphic(
+        opacity: Double = 0.15,
+        material: NSVisualEffectView.Material = .sidebar
+    ) -> some View {
+        modifier(GlassmorphicModifier(opacity: opacity, material: material))
     }
 }
