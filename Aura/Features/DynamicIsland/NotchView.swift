@@ -6,9 +6,14 @@ struct NotchView: View {
     @State private var hoveredControl: String?
     @State private var systemTimer: Timer?
     @State private var appSettings = AppSettingsManager.shared
+    @State private var eventDays: Set<Int> = []
 
     private let calendar = Calendar.autoupdatingCurrent
     private let weekdaySymbols = Calendar.autoupdatingCurrent.shortWeekdaySymbols
+
+    private var hasMusicContent: Bool {
+        viewModel.hasMedia || !viewModel.lastTrackTitle.isEmpty
+    }
 
     var body: some View {
         notchContent
@@ -25,6 +30,12 @@ struct NotchView: View {
             }
             .onDisappear {
                 systemTimer?.invalidate()
+            }
+            .task {
+                let granted = await CalendarService.shared.requestAccess()
+                if granted {
+                    eventDays = CalendarService.shared.hasEventsForWeek()
+                }
             }
     }
 
@@ -69,12 +80,18 @@ struct NotchView: View {
         VStack(spacing: 0) {
             topBar
             Divider().opacity(0.15)
-            HStack(spacing: 0) {
-                musicSection
-                    .frame(maxWidth: .infinity)
-                Divider().opacity(0.15)
+
+            if hasMusicContent && appSettings.showMediaControls {
+                HStack(spacing: 0) {
+                    musicSection
+                        .frame(maxWidth: .infinity)
+                    Divider().opacity(0.15)
+                    calendarSection
+                        .frame(maxWidth: .infinity)
+                }
+            } else {
                 calendarSection
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
@@ -129,56 +146,99 @@ struct NotchView: View {
 
     @ViewBuilder
     private var musicSection: some View {
-        if viewModel.hasMedia && appSettings.showMediaControls {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 10) {
-                    albumArtView
-                        .frame(width: 38, height: 38)
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(viewModel.nowPlayingTitle)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                        Text(viewModel.nowPlayingArtist)
-                            .font(.system(size: 9))
-                            .foregroundColor(.white.opacity(0.5))
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer().frame(height: 8)
-
-                customProgressBar(value: viewModel.progress, width: nil)
-
-                Spacer().frame(height: 8)
-
-                HStack(spacing: 16) {
-                    transportButton(icon: "backward.fill", id: "back", size: 10)
-                    transportButton(icon: viewModel.isPlaying ? "pause.fill" : "play.fill", id: "playpause", size: 14, isPrimary: true)
-                    transportButton(icon: "forward.fill", id: "forward", size: 10)
-                    Spacer()
-                    sourceAppLabel
-                }
-            }
-            .padding(12)
+        if viewModel.hasMedia {
+            currentTrackView
+        } else if !viewModel.lastTrackTitle.isEmpty {
+            lastTrackView
         } else {
-            VStack(spacing: 6) {
-                Image(systemName: "music.note")
-                    .font(.system(size: 16))
-                    .foregroundColor(.white.opacity(0.2))
-                Text("No music playing")
-                    .font(.system(size: 9))
-                    .foregroundColor(.white.opacity(0.3))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            noMusicPlaceholder
         }
     }
 
+    private var currentTrackView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                albumArtView(icon: viewModel.sourceAppIcon, source: viewModel.mediaSource)
+                    .frame(width: 38, height: 38)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(viewModel.nowPlayingTitle)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    Text(viewModel.nowPlayingArtist)
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer().frame(height: 8)
+
+            customProgressBar(value: viewModel.progress, width: nil)
+
+            Spacer().frame(height: 8)
+
+            HStack(spacing: 16) {
+                transportButton(icon: "backward.fill", id: "back", size: 10)
+                transportButton(icon: viewModel.isPlaying ? "pause.fill" : "play.fill", id: "playpause", size: 14, isPrimary: true)
+                transportButton(icon: "forward.fill", id: "forward", size: 10)
+                Spacer()
+                sourceAppLabel(viewModel.sourceAppName)
+            }
+        }
+        .padding(12)
+    }
+
+    private var lastTrackView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                albumArtView(icon: viewModel.lastTrackIcon, source: viewModel.lastTrackSource)
+                    .frame(width: 38, height: 38)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(viewModel.lastTrackTitle)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    Text(viewModel.lastTrackArtist)
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.5))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer().frame(height: 8)
+
+            HStack(spacing: 4) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 8))
+                    .foregroundColor(.white.opacity(0.3))
+                Text("Last played")
+                    .font(.system(size: 8))
+                    .foregroundColor(.white.opacity(0.3))
+                Spacer()
+            }
+        }
+        .padding(12)
+    }
+
+    private var noMusicPlaceholder: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "music.note")
+                .font(.system(size: 16))
+                .foregroundColor(.white.opacity(0.2))
+            Text("No music playing")
+                .font(.system(size: 9))
+                .foregroundColor(.white.opacity(0.3))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     @ViewBuilder
-    private var albumArtView: some View {
+    private func albumArtView(icon: NSImage?, source: NotchViewModel.MediaSource) -> some View {
         ZStack(alignment: .bottomTrailing) {
-            if let icon = viewModel.sourceAppIcon {
+            if let icon {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -192,7 +252,7 @@ struct NotchView: View {
                     )
             }
 
-            if viewModel.mediaSource.bundleID == "com.spotify.client" {
+            if source.bundleID == "com.spotify.client" {
                 Circle()
                     .fill(Color(red: 0.13, green: 0.78, blue: 0.33))
                     .frame(width: 10, height: 10)
@@ -208,9 +268,9 @@ struct NotchView: View {
     }
 
     @ViewBuilder
-    private var sourceAppLabel: some View {
-        if !viewModel.sourceAppName.isEmpty {
-            Text(viewModel.sourceAppName)
+    private func sourceAppLabel(_ name: String) -> some View {
+        if !name.isEmpty {
+            Text(name)
                 .font(.system(size: 8))
                 .foregroundColor(.white.opacity(0.25))
         }
@@ -276,12 +336,31 @@ struct NotchView: View {
                 ForEach(0..<7, id: \.self) { i in
                     let day = i - firstWeekdayOfMonth + 1
                     if day > 0 && day <= daysInMonth {
-                        Text("\(day)")
-                            .font(.system(size: 7, weight: day == dayNumber ? .bold : .regular))
-                            .foregroundColor(day == dayNumber ? .black : .white.opacity(0.45))
-                            .frame(width: 16, height: 16)
-                            .background(day == dayNumber ? Color.white : Color.clear)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        VStack(spacing: 1) {
+                            Text("\(day)")
+                                .font(.system(size: 7, weight: day == dayNumber ? .bold : .regular))
+                                .foregroundColor(day == dayNumber ? .black : .white.opacity(0.45))
+                                .frame(width: 16, height: 16)
+                                .background(day == dayNumber ? Color.white : Color.clear)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .onTapGesture {
+                                    CalendarService.openCalendarApp()
+                                }
+
+                            if eventDays.contains(day) {
+                                Circle()
+                                    .fill(Color.red.opacity(0.8))
+                                    .frame(width: 3, height: 3)
+                            }
+                        }
+                        .frame(width: 16)
+                        .onHover { hovering in
+                            if hovering {
+                                hoveredControl = "cal-\(day)"
+                            } else if hoveredControl == "cal-\(day)" {
+                                hoveredControl = nil
+                            }
+                        }
                     } else {
                         Rectangle()
                             .fill(.clear)
@@ -290,10 +369,30 @@ struct NotchView: View {
                 }
             }
 
-            Text("No Events Today")
-                .font(.system(size: 8))
-                .foregroundColor(.white.opacity(0.25))
-                .padding(.top, 2)
+            HStack(spacing: 4) {
+                if !eventDays.isEmpty {
+                    let todayEvents = eventDays.contains(dayNumber)
+                    if todayEvents {
+                        Text("Events today")
+                            .font(.system(size: 8))
+                            .foregroundColor(.red.opacity(0.7))
+                        Circle()
+                            .fill(.red.opacity(0.8))
+                            .frame(width: 4, height: 4)
+                    }
+                    Text("\(eventDays.count) day\(eventDays.count == 1 ? "" : "s") with events this week")
+                        .font(.system(size: 8))
+                        .foregroundColor(.white.opacity(0.25))
+                } else {
+                    Text("No Events Today")
+                        .font(.system(size: 8))
+                        .foregroundColor(.white.opacity(0.25))
+                }
+            }
+            .padding(.top, 2)
+            .onTapGesture {
+                CalendarService.openCalendarApp()
+            }
         }
         .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
     }

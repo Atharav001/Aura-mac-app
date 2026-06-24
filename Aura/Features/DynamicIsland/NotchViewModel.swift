@@ -50,6 +50,13 @@ final class NotchViewModel {
     var sourceAppName: String = ""
     var sourceAppIcon: NSImage?
 
+    // Last track cache — persists when playback stops
+    var lastTrackTitle: String = ""
+    var lastTrackArtist: String = ""
+    var lastTrackIcon: NSImage?
+    var lastTrackSource: MediaSource = .local
+    var lastTrackAppName: String = ""
+
     var currentDate: String = ""
     var currentTime: String = ""
     var batteryLevel: Double = 0
@@ -115,6 +122,14 @@ final class NotchViewModel {
         sourceAppName = appName
         sourceAppIcon = appIcon
         hasMedia = true
+
+        // Cache last track info
+        lastTrackTitle = title
+        lastTrackArtist = artist
+        lastTrackIcon = appIcon
+        lastTrackSource = source
+        lastTrackAppName = appName
+
         if isHovering {
             state = .media
         }
