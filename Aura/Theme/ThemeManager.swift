@@ -81,6 +81,20 @@ final class AppSettingsManager {
     var accentColor: Color = .blue
     var notchStyle: String = "melted"
 
+    // Reactive settings observed by NotchView and other views
+    var showBatteryInNotch: Bool = true
+    var showBatteryPercentage: Bool = true
+    var showChargingIndicator: Bool = true
+    var showMediaControls: Bool = true
+    var settingsIconInNotch: Bool = true
+    var windowShadow: Bool = true
+    var openNotchOnHover: Bool = true
+    var enableHaptics: Bool = true
+    var simpleCloseAnim: Bool = true
+    var playerTinting: Bool = true
+    var blurBehindAlbum: Bool = true
+    var coloredSpectrograms: Bool = true
+
     private init() {
         reload()
         NotificationCenter.default.addObserver(
@@ -100,6 +114,19 @@ final class AppSettingsManager {
         accentHex = DataStore.shared.string(for: .accentColor) ?? "#007AFF"
         accentColor = Color(hex: accentHex) ?? .blue
         notchStyle = DataStore.shared.string(for: .notchStyle) ?? "melted"
+
+        showBatteryInNotch = DataStore.shared.bool(for: .showBatteryInNotch, default: true)
+        showBatteryPercentage = DataStore.shared.bool(for: .showBatteryPercentage, default: true)
+        showChargingIndicator = DataStore.shared.bool(for: .showChargingIndicator, default: true)
+        showMediaControls = DataStore.shared.bool(for: .showMediaControls, default: true)
+        settingsIconInNotch = DataStore.shared.bool(for: .settingsIconInNotch, default: true)
+        windowShadow = DataStore.shared.bool(for: .windowShadow, default: true)
+        openNotchOnHover = DataStore.shared.bool(for: .openNotchOnHover, default: true)
+        enableHaptics = DataStore.shared.bool(for: .enableHaptics, default: true)
+        simpleCloseAnim = DataStore.shared.bool(for: .simpleCloseAnim, default: true)
+        playerTinting = DataStore.shared.bool(for: .playerTinting, default: true)
+        blurBehindAlbum = DataStore.shared.bool(for: .blurBehindAlbum, default: true)
+        coloredSpectrograms = DataStore.shared.bool(for: .coloredSpectrograms, default: true)
     }
 
     func saveAndNotify(glassmorphism: Bool? = nil, accentHex: String? = nil, notchStyle: String? = nil) {

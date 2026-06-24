@@ -87,9 +87,18 @@ final class NotchManager {
         DataStore.shared.double(for: .notchHideDelay, default: 1.0)
     }
 
+    private var extendHoverAmount: CGFloat {
+        DataStore.shared.bool(for: .extendHoverArea, default: true) ? -40 : -12
+    }
+
+    private var openOnHoverEnabled: Bool {
+        DataStore.shared.bool(for: .openNotchOnHover, default: true)
+    }
+
     private func pollMousePosition() {
+        guard openOnHoverEnabled else { return }
         let mouseLocation = NSEvent.mouseLocation
-        let checkRect = viewModel.notchRect.insetBy(dx: -20, dy: -20)
+        let checkRect = viewModel.notchRect.insetBy(dx: extendHoverAmount, dy: extendHoverAmount)
         let isNear = checkRect.contains(mouseLocation)
 
         if isNear && !isHovering {
@@ -100,6 +109,17 @@ final class NotchManager {
             isHovering = false
             scheduleCollapse()
         }
+    }
+
+    func openNotch() {
+        isHovering = true
+        hideWorkItem?.cancel()
+        expand()
+    }
+
+    func closeNotch() {
+        isHovering = false
+        collapse()
     }
 
     private func expand() {

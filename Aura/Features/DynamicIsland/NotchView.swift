@@ -13,7 +13,8 @@ struct NotchView: View {
     var body: some View {
         notchContent
             .frame(width: viewModel.currentFrame.width, height: viewModel.currentFrame.height)
-            .animation(.spring(response: 0.45, dampingFraction: 0.8, blendDuration: 0.3), value: viewModel.state)
+            .animation(appSettings.simpleCloseAnim ? .easeInOut(duration: 0.25) : .spring(response: 0.45, dampingFraction: 0.8, blendDuration: 0.3), value: viewModel.state)
+            .shadow(color: appSettings.windowShadow ? .black.opacity(0.3) : .clear, radius: appSettings.windowShadow ? 8 : 0, x: 0, y: appSettings.windowShadow ? 4 : 0)
             .onAppear {
                 viewModel.updateSystemInfo()
                 systemTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
@@ -84,17 +85,23 @@ struct NotchView: View {
         HStack(spacing: 14) {
             topBarButton(icon: "house", id: "home")
             topBarButton(icon: "tray", id: "inbox")
-            topBarButton(icon: "gearshape", id: "settings")
+            if appSettings.settingsIconInNotch {
+                topBarButton(icon: "gearshape", id: "settings")
+            }
 
             Spacer()
 
-            HStack(spacing: 4) {
-                Image(systemName: batteryIconName)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(batteryColor)
-                Text("\(Int(viewModel.batteryLevel * 100))%")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
+            if appSettings.showBatteryInNotch && viewModel.batteryLevel > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: batteryIconName)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(batteryColor)
+                    if appSettings.showBatteryPercentage {
+                        Text("\(Int(viewModel.batteryLevel * 100))%")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
@@ -122,7 +129,7 @@ struct NotchView: View {
 
     @ViewBuilder
     private var musicSection: some View {
-        if viewModel.hasMedia {
+        if viewModel.hasMedia && appSettings.showMediaControls {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
                     albumArtView

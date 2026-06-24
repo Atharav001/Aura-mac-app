@@ -16,43 +16,43 @@ struct SettingsView: View {
     @State private var appSettings = AppSettingsManager.shared
 
     // General
-    @State private var extendHoverArea = true
-    @State private var enableHaptics = true
-    @State private var openNotchOnHover = true
-    @State private var rememberLastTab = false
+    @State private var extendHoverArea = DataStore.shared.bool(for: .extendHoverArea, default: true)
+    @State private var enableHaptics = DataStore.shared.bool(for: .enableHaptics, default: true)
+    @State private var openNotchOnHover = DataStore.shared.bool(for: .openNotchOnHover, default: true)
+    @State private var rememberLastTab = DataStore.shared.bool(for: .rememberLastTab, default: false)
     @State private var minHoverDuration: Double = DataStore.shared.double(for: .notchHideDelay, default: 1.0)
-    @State private var enableGestures = true
-    @State private var mediaHorizontalGestures = false
-    @State private var closeGesture = true
-    @State private var gestureSensitivity: Double = 0.5
-    @State private var notchHeightOption = "Match menubar height"
+    @State private var enableGestures = DataStore.shared.bool(for: .enableGestures, default: true)
+    @State private var mediaHorizontalGestures = DataStore.shared.bool(for: .mediaHorizontalGestures, default: false)
+    @State private var closeGesture = DataStore.shared.bool(for: .closeGesture, default: true)
+    @State private var gestureSensitivity: Double = DataStore.shared.double(for: .gestureSensitivity, default: 0.5)
+    @State private var notchHeightOption = DataStore.shared.string(for: .notchHeightOption) ?? "Match menubar height"
 
     // Appearance
-    @State private var showTabs = true
-    @State private var settingsIconInNotch = true
-    @State private var windowShadow = true
-    @State private var cornerRadiusScaling = true
-    @State private var simpleCloseAnim = true
-    @State private var coloredSpectrograms = true
-    @State private var playerTinting = true
-    @State private var blurBehindAlbum = true
-    @State private var sliderColorOption = "Match album art"
-    @State private var useSpectrogram = false
+    @State private var showTabs = DataStore.shared.bool(for: .showTabs, default: true)
+    @State private var settingsIconInNotch = DataStore.shared.bool(for: .settingsIconInNotch, default: true)
+    @State private var windowShadow = DataStore.shared.bool(for: .windowShadow, default: true)
+    @State private var cornerRadiusScaling = DataStore.shared.bool(for: .cornerRadiusScaling, default: true)
+    @State private var simpleCloseAnim = DataStore.shared.bool(for: .simpleCloseAnim, default: true)
+    @State private var coloredSpectrograms = DataStore.shared.bool(for: .coloredSpectrograms, default: true)
+    @State private var playerTinting = DataStore.shared.bool(for: .playerTinting, default: true)
+    @State private var blurBehindAlbum = DataStore.shared.bool(for: .blurBehindAlbum, default: true)
+    @State private var sliderColorOption = DataStore.shared.string(for: .sliderColorOption) ?? "Match album art"
+    @State private var useSpectrogram = DataStore.shared.bool(for: .useSpectrogram, default: false)
 
     // Battery
-    @State private var showBatteryGeneral1 = true
-    @State private var showBatteryGeneral2 = true
-    @State private var showBatteryInfo1 = true
-    @State private var showBatteryInfo2 = true
+    @State private var showBatteryGeneral1 = DataStore.shared.bool(for: .showBatteryInNotch, default: true)
+    @State private var showBatteryGeneral2 = DataStore.shared.bool(for: .showBatteryPercentage, default: true)
+    @State private var showBatteryInfo1 = DataStore.shared.bool(for: .showChargingIndicator, default: true)
+    @State private var showBatteryInfo2 = DataStore.shared.bool(for: .showTimeRemaining, default: true)
 
     // Media
-    @State private var musicSource = "Spotify"
-    @State private var showMediaControls = true
-    @State private var liveActivityToggle1 = true
-    @State private var liveActivityToggle2 = true
-    @State private var liveActivityDefault = "Default"
-    @State private var liveActivityDuration = "10 seconds"
-    @State private var hideInFullscreen = "Always hide in fullscreen"
+    @State private var musicSource = DataStore.shared.string(for: .musicSource) ?? "Spotify"
+    @State private var showMediaControls = DataStore.shared.bool(for: .showMediaControls, default: true)
+    @State private var liveActivityToggle1 = DataStore.shared.bool(for: .liveActivityToggle1, default: true)
+    @State private var liveActivityToggle2 = DataStore.shared.bool(for: .liveActivityToggle2, default: true)
+    @State private var liveActivityDefault = DataStore.shared.string(for: .liveActivityDefault) ?? "Default"
+    @State private var liveActivityDuration = DataStore.shared.string(for: .liveActivityDuration) ?? "10 seconds"
+    @State private var hideInFullscreen = DataStore.shared.string(for: .hideInFullscreen) ?? "Always hide in fullscreen"
 
     // Our existing settings
     @State private var appearanceMode = DataStore.shared.string(for: .appearanceMode) ?? "dark"
@@ -70,6 +70,8 @@ struct SettingsView: View {
     @State private var cyclesBeforeLongBreak = Int(DataStore.shared.double(for: .pomodoroCyclesBeforeLongBreak, default: 4))
     @State private var spotifyConnected = DataStore.shared.bool(for: .spotifyEnabled, default: true)
     @State private var appleMusicConnected = DataStore.shared.bool(for: .appleMusicEnabled, default: true)
+    @State private var checkUpdatesAutomatically = DataStore.shared.bool(for: .checkUpdatesAutomatically, default: true)
+    @State private var downloadBetaVersions = DataStore.shared.bool(for: .downloadBetaVersions, default: false)
 
     @State private var hoveredSection: Section?
     @State private var showMusicSourcePicker = false
@@ -103,7 +105,7 @@ struct SettingsView: View {
             Rectangle().fill(settingsBorder).frame(width: 1)
             contentArea
         }
-        .frame(minWidth: 620, minHeight: 460)
+        .frame(minWidth: 680, minHeight: 520)
         .background(settingsContentBG)
     }
 
@@ -197,12 +199,16 @@ struct SettingsView: View {
                 // Notch behavior card
                 settingsCard("Notch behavior") {
                     toggleRow("Extend hover area", value: $extendHoverArea)
+                        .onChange(of: extendHoverArea) { _, nv in DataStore.shared.set(key: .extendHoverArea, value: nv) }
                     dividerRow
                     toggleRow("Enable haptics", value: $enableHaptics)
+                        .onChange(of: enableHaptics) { _, nv in DataStore.shared.set(key: .enableHaptics, value: nv) }
                     dividerRow
                     toggleRow("Open notch on hover", value: $openNotchOnHover)
+                        .onChange(of: openNotchOnHover) { _, nv in DataStore.shared.set(key: .openNotchOnHover, value: nv) }
                     dividerRow
                     toggleRow("Remember last tab", value: $rememberLastTab)
+                        .onChange(of: rememberLastTab) { _, nv in DataStore.shared.set(key: .rememberLastTab, value: nv) }
                     dividerRow
                     sliderRow("Minimum hover duration", value: $minHoverDuration, range: 0.1...1.0, format: { String(format: "%.1fs", $0) })
                         .onChange(of: minHoverDuration) { _, nv in DataStore.shared.set(key: .notchHideDelay, value: nv) }
@@ -211,12 +217,16 @@ struct SettingsView: View {
                 // Gesture control card
                 settingsCard("Gesture control", badge: "Beta") {
                     toggleRow("Enable gestures", value: $enableGestures)
+                        .onChange(of: enableGestures) { _, nv in DataStore.shared.set(key: .enableGestures, value: nv) }
                     dividerRow
                     toggleRow("Media change with horizontal gestures", value: $mediaHorizontalGestures)
+                        .onChange(of: mediaHorizontalGestures) { _, nv in DataStore.shared.set(key: .mediaHorizontalGestures, value: nv) }
                     dividerRow
                     toggleRow("Close gesture", value: $closeGesture)
+                        .onChange(of: closeGesture) { _, nv in DataStore.shared.set(key: .closeGesture, value: nv) }
                     dividerRow
                     sliderRow("Gesture sensitivity", value: $gestureSensitivity, range: 0...1, format: { v in v < 0.33 ? "Low" : v < 0.66 ? "Medium" : "High" })
+                        .onChange(of: gestureSensitivity) { _, nv in DataStore.shared.set(key: .gestureSensitivity, value: nv) }
                 }
 
                 footerText("Two-finger swipe up on notch to close, two-finger swipe down on notch to open when Open notch on hover option is disabled")
@@ -269,30 +279,40 @@ struct SettingsView: View {
                 // General panel (Boring Notch style)
                 settingsCard("General") {
                     toggleRow("Always show tabs", value: $showTabs)
+                        .onChange(of: showTabs) { _, nv in DataStore.shared.set(key: .showTabs, value: nv) }
                     dividerRow
                     toggleRow("Settings icon in notch", value: $settingsIconInNotch)
+                        .onChange(of: settingsIconInNotch) { _, nv in DataStore.shared.set(key: .settingsIconInNotch, value: nv) }
                     dividerRow
                     toggleRow("Enable window shadow", value: $windowShadow)
+                        .onChange(of: windowShadow) { _, nv in DataStore.shared.set(key: .windowShadow, value: nv) }
                     dividerRow
                     toggleRow("Corner radius scaling", value: $cornerRadiusScaling)
+                        .onChange(of: cornerRadiusScaling) { _, nv in DataStore.shared.set(key: .cornerRadiusScaling, value: nv) }
                     dividerRow
                     toggleRow("Use simpler close animation", value: $simpleCloseAnim)
+                        .onChange(of: simpleCloseAnim) { _, nv in DataStore.shared.set(key: .simpleCloseAnim, value: nv) }
                 }
 
                 // Media panel
                 settingsCard("Media") {
                     toggleRow("Enable colored spectrograms", value: $coloredSpectrograms)
+                        .onChange(of: coloredSpectrograms) { _, nv in DataStore.shared.set(key: .coloredSpectrograms, value: nv) }
                     dividerRow
                     toggleRow("Player tinting", value: $playerTinting)
+                        .onChange(of: playerTinting) { _, nv in DataStore.shared.set(key: .playerTinting, value: nv) }
                     dividerRow
                     toggleRow("Enable blur effect behind album art", value: $blurBehindAlbum)
+                        .onChange(of: blurBehindAlbum) { _, nv in DataStore.shared.set(key: .blurBehindAlbum, value: nv) }
                     dividerRow
                     chevronRow("Slider color", value: $sliderColorOption)
+                        .onChange(of: sliderColorOption) { _, nv in DataStore.shared.set(key: .sliderColorOption, value: nv) }
                 }
 
                 // Custom music live activity animation
                 settingsCard("Custom music live activity animation", badge: "Coming soon") {
                     toggleRow("Use music visualizer spectrogram", value: $useSpectrogram)
+                        .onChange(of: useSpectrogram) { _, nv in DataStore.shared.set(key: .useSpectrogram, value: nv) }
                 }
             }
             .padding(20)
@@ -308,14 +328,30 @@ struct SettingsView: View {
 
                 settingsCard("General") {
                     toggleRow("Show battery in notch", value: $showBatteryGeneral1)
+                        .onChange(of: showBatteryGeneral1) { _, nv in
+                            DataStore.shared.set(key: .showBatteryInNotch, value: nv)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        }
                     dividerRow
                     toggleRow("Show percentage", value: $showBatteryGeneral2)
+                        .onChange(of: showBatteryGeneral2) { _, nv in
+                            DataStore.shared.set(key: .showBatteryPercentage, value: nv)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        }
                 }
 
                 settingsCard("Battery Information") {
                     toggleRow("Show charging indicator", value: $showBatteryInfo1)
+                        .onChange(of: showBatteryInfo1) { _, nv in
+                            DataStore.shared.set(key: .showChargingIndicator, value: nv)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        }
                     dividerRow
                     toggleRow("Show time remaining", value: $showBatteryInfo2)
+                        .onChange(of: showBatteryInfo2) { _, nv in
+                            DataStore.shared.set(key: .showTimeRemaining, value: nv)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        }
                 }
             }
             .padding(20)
@@ -349,6 +385,7 @@ struct SettingsView: View {
                                     ForEach(["Spotify", "Apple Music", "Local Files", "System Audio"], id: \.self) { src in
                                         Button {
                                             musicSource = src
+                                            DataStore.shared.set(key: .musicSource, value: src)
                                             showMusicSourcePicker = false
                                         } label: {
                                             HStack {
@@ -381,19 +418,34 @@ struct SettingsView: View {
                 // Media Controls
                 settingsCard("Media controls", badge: "Beta") {
                     toggleRow("Show media controls in notch", value: $showMediaControls)
+                        .onChange(of: showMediaControls) { _, nv in
+                            DataStore.shared.set(key: .showMediaControls, value: nv)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        }
                 }
 
                 // Live Activity
                 settingsCard("Live activity") {
                     toggleRow("Show now playing", value: $liveActivityToggle1)
+                        .onChange(of: liveActivityToggle1) { _, nv in
+                            DataStore.shared.set(key: .liveActivityToggle1, value: nv)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        }
                     dividerRow
                     toggleRow("Show playback progress", value: $liveActivityToggle2)
+                        .onChange(of: liveActivityToggle2) { _, nv in
+                            DataStore.shared.set(key: .liveActivityToggle2, value: nv)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        }
                     dividerRow
                     chevronRow("Default view", value: $liveActivityDefault)
+                        .onChange(of: liveActivityDefault) { _, nv in DataStore.shared.set(key: .liveActivityDefault, value: nv) }
                     dividerRow
                     chevronRow("Hide after", value: $liveActivityDuration)
+                        .onChange(of: liveActivityDuration) { _, nv in DataStore.shared.set(key: .liveActivityDuration, value: nv) }
                     dividerRow
                     chevronRow("Fullscreen behavior", value: $hideInFullscreen, badge: "Beta")
+                        .onChange(of: hideInFullscreen) { _, nv in DataStore.shared.set(key: .hideInFullscreen, value: nv) }
                 }
             }
             .padding(20)
@@ -407,12 +459,59 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 headerText("Connections")
 
+                // Spotify
                 settingsCard("Music Integrations") {
-                    toggleRow("Spotify", value: $spotifyConnected)
-                        .onChange(of: spotifyConnected) { _, nv in MediaTracker.shared.setSpotifyConnected(nv) }
-                    dividerRow
-                    toggleRow("Apple Music", value: $appleMusicConnected)
-                        .onChange(of: appleMusicConnected) { _, nv in MediaTracker.shared.setAppleMusicConnected(nv) }
+                    VStack(spacing: 8) {
+                        appConnectionRow(
+                            appName: "Spotify",
+                            bundleID: "com.spotify.client",
+                            isConnected: $spotifyConnected,
+                            onToggle: { nv in MediaTracker.shared.setSpotifyConnected(nv) }
+                        )
+                        dividerRow
+                        appConnectionRow(
+                            appName: "Apple Music",
+                            bundleID: "com.apple.Music",
+                            isConnected: $appleMusicConnected,
+                            onToggle: { nv in MediaTracker.shared.setAppleMusicConnected(nv) }
+                        )
+                    }
+                }
+
+                settingsCard("Now Playing Status") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        let notchVM = NotchManager.shared.viewModel
+                        if spotifyConnected || appleMusicConnected {
+                            if !notchVM.nowPlayingTitle.isEmpty {
+                                HStack {
+                                    Image(systemName: "music.note").foregroundColor(.green).font(.system(size: 10))
+                                    Text("Now Playing: \(notchVM.nowPlayingTitle)")
+                                        .font(.system(size: 11)).foregroundColor(.white)
+                                    Spacer()
+                                }
+                                HStack {
+                                    Text(notchVM.nowPlayingArtist)
+                                        .font(.system(size: 10)).foregroundColor(settingsSecondaryText)
+                                    Spacer()
+                                }
+                            } else {
+                                HStack {
+                                    Image(systemName: "antenna.radiowaves.left.and.right").foregroundColor(.orange).font(.system(size: 10))
+                                    Text("Listening... waiting for playback")
+                                        .font(.system(size: 11)).foregroundColor(settingsSecondaryText)
+                                    Spacer()
+                                }
+                            }
+                        } else {
+                            HStack {
+                                Image(systemName: "poweroff").foregroundColor(settingsSecondaryText).font(.system(size: 10))
+                                Text("Enable Spotify or Apple Music above")
+                                    .font(.system(size: 11)).foregroundColor(settingsSecondaryText)
+                                Spacer()
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
                 }
 
                 settingsCard("Browser Support") {
@@ -430,7 +529,7 @@ struct SettingsView: View {
                 }
 
                 settingsCard("How It Works") {
-                    Text("Aura detects media playback from connected apps using macOS Now Playing. Any app that reports now playing information will automatically appear in the Aura notch.")
+                    Text("Aura uses macOS Distributed Notification Center to detect when Spotify or Apple Music changes tracks. No private APIs required. Enable the apps above, then play music — it will appear in the Aura notch automatically.")
                         .font(.system(size: 11))
                         .foregroundColor(settingsSecondaryText)
                         .lineSpacing(4)
@@ -438,6 +537,60 @@ struct SettingsView: View {
             }
             .padding(20)
         }
+    }
+
+    private func appConnectionRow(appName: String, bundleID: String, isConnected: Binding<Bool>, onToggle: @escaping (Bool) -> Void) -> some View {
+        HStack(spacing: 10) {
+            if let appIcon = appIcon(for: bundleID) {
+                Image(nsImage: appIcon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 22, height: 22)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+            } else {
+                Image(systemName: appName == "Spotify" ? "music.note.list" : "apple.logo")
+                    .font(.system(size: 14))
+                    .foregroundColor(settingsSecondaryText)
+                    .frame(width: 22, height: 22)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(appName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white)
+                Text(isConnected.wrappedValue ? "Connected" : "Not connected")
+                    .font(.system(size: 9))
+                    .foregroundColor(isConnected.wrappedValue ? .green : settingsSecondaryText)
+            }
+
+            Spacer()
+
+            Button(isConnected.wrappedValue ? "Disconnect" : "Connect") {
+                if !isConnected.wrappedValue {
+                    NSWorkspace.shared.openApplication(at: applicationURL(for: bundleID), configuration: NSWorkspace.OpenConfiguration())
+                }
+                isConnected.wrappedValue.toggle()
+                onToggle(isConnected.wrappedValue)
+            }
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(isConnected.wrappedValue ? Color.red.opacity(0.3) : settingsBlue.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(settingsBorder))
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func appIcon(for bundleID: String) -> NSImage? {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
+        return NSWorkspace.shared.icon(forFile: appURL.path)
+    }
+
+    private func applicationURL(for bundleID: String) -> URL {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) ?? URL(string: "https://\(bundleID == "com.spotify.client" ? "spotify.com" : "apple.com/music")")!
     }
 
     // MARK: - Timers
@@ -501,27 +654,39 @@ struct SettingsView: View {
                     }
 
                     settingsCard("Software updates") {
-                        toggleRow("Check automatically", value: .constant(false))
+                        toggleRow("Check automatically", value: $checkUpdatesAutomatically)
+                            .onChange(of: checkUpdatesAutomatically) { _, nv in DataStore.shared.set(key: .checkUpdatesAutomatically, value: nv) }
                         Rectangle().fill(settingsBorder).frame(height: 1)
-                        toggleRow("Download beta versions", value: .constant(false))
+                        toggleRow("Download beta versions", value: $downloadBetaVersions)
+                            .onChange(of: downloadBetaVersions) { _, nv in DataStore.shared.set(key: .downloadBetaVersions, value: nv) }
                     }
 
                     settingsCard(nil) {
-                        HStack {
-                            Image(systemName: "cup.and.saucer.fill").foregroundColor(.white).font(.system(size: 12))
-                            Text("Support Us").foregroundColor(.white).font(.system(size: 12))
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundColor(settingsSecondaryText).font(.system(size: 10))
+                        Button {
+                            NSWorkspace.shared.open(URL(string: "https://opencode.ai/sponsor")!)
+                        } label: {
+                            HStack {
+                                Image(systemName: "cup.and.saucer.fill").foregroundColor(.white).font(.system(size: 12))
+                                Text("Support Us").foregroundColor(.white).font(.system(size: 12))
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundColor(settingsSecondaryText).font(.system(size: 10))
+                            }
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
+                        .buttonStyle(.plain)
                         Rectangle().fill(settingsBorder).frame(height: 1)
-                        HStack {
-                            Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundColor(.white).font(.system(size: 12))
-                            Text("GitHub").foregroundColor(.white).font(.system(size: 12))
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundColor(settingsSecondaryText).font(.system(size: 10))
+                        Button {
+                            NSWorkspace.shared.open(URL(string: "https://github.com/anomalyco/Aura-mac-app")!)
+                        } label: {
+                            HStack {
+                                Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundColor(.white).font(.system(size: 12))
+                                Text("GitHub").foregroundColor(.white).font(.system(size: 12))
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundColor(settingsSecondaryText).font(.system(size: 10))
+                            }
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(20)
@@ -549,19 +714,27 @@ struct SettingsView: View {
         }
     }
 
-    private func headerWithButton(_ text: String, buttonTitle: String) -> some View {
+    private func headerWithButton(_ text: String, buttonTitle: String, action: (() -> Void)? = nil) -> some View {
         HStack {
             Text(text).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
             Spacer()
-            Text(buttonTitle)
-                .font(.system(size: 11))
-                .foregroundColor(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(settingsBorder)
-                )
+            Button(buttonTitle) {
+                if text == "General" {
+                    NSApp.terminate(nil)
+                } else if text == "About" {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/anomalyco/aura/releases")!)
+                }
+                action?()
+            }
+            .font(.system(size: 11))
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(settingsBorder)
+            )
+            .buttonStyle(.plain)
         }
     }
 

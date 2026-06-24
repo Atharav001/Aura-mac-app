@@ -54,12 +54,12 @@ final class PanelManager: @unchecked Sendable {
         }
 
         let settingsView = SettingsView()
-            .frame(minWidth: 580, idealWidth: 620, maxWidth: .infinity, minHeight: 420, idealHeight: 480, maxHeight: .infinity)
+            .frame(minWidth: 680, idealWidth: 720, maxWidth: .infinity, minHeight: 520, idealHeight: 560, maxHeight: .infinity)
         let hostingView = NSHostingView(rootView: settingsView)
         hostingView.autoresizingMask = [.width, .height]
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -67,7 +67,7 @@ final class PanelManager: @unchecked Sendable {
         window.title = "Aura Settings"
         window.contentView = hostingView
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 580, height: 420)
+        window.minSize = NSSize(width: 680, height: 520)
         window.center()
         window.makeKeyAndOrderFront(nil)
 

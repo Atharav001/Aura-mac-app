@@ -29,6 +29,48 @@ extension DataStore {
         case menuBarIconVisible = "ui.menuBarIconVisible"
         case spotifyEnabled = "integrations.spotify"
         case appleMusicEnabled = "integrations.appleMusic"
+
+        // General
+        case extendHoverArea = "general.extendHoverArea"
+        case enableHaptics = "general.enableHaptics"
+        case openNotchOnHover = "general.openNotchOnHover"
+        case rememberLastTab = "general.rememberLastTab"
+        case enableGestures = "general.enableGestures"
+        case mediaHorizontalGestures = "general.mediaHorizontalGestures"
+        case closeGesture = "general.closeGesture"
+        case gestureSensitivity = "general.gestureSensitivity"
+        case notchHeightOption = "general.notchHeightOption"
+
+        // Appearance
+        case showTabs = "appearance.showTabs"
+        case settingsIconInNotch = "appearance.settingsIconInNotch"
+        case windowShadow = "appearance.windowShadow"
+        case cornerRadiusScaling = "appearance.cornerRadiusScaling"
+        case simpleCloseAnim = "appearance.simpleCloseAnim"
+        case coloredSpectrograms = "appearance.coloredSpectrograms"
+        case playerTinting = "appearance.playerTinting"
+        case blurBehindAlbum = "appearance.blurBehindAlbum"
+        case sliderColorOption = "appearance.sliderColorOption"
+        case useSpectrogram = "appearance.useSpectrogram"
+
+        // Battery
+        case showBatteryInNotch = "battery.showInNotch"
+        case showBatteryPercentage = "battery.showPercentage"
+        case showChargingIndicator = "battery.showChargingIndicator"
+        case showTimeRemaining = "battery.showTimeRemaining"
+
+        // Media
+        case musicSource = "media.musicSource"
+        case showMediaControls = "media.showMediaControls"
+        case liveActivityToggle1 = "media.liveActivityToggle1"
+        case liveActivityToggle2 = "media.liveActivityToggle2"
+        case liveActivityDefault = "media.liveActivityDefault"
+        case liveActivityDuration = "media.liveActivityDuration"
+        case hideInFullscreen = "media.hideInFullscreen"
+
+        // About
+        case checkUpdatesAutomatically = "about.checkUpdatesAutomatically"
+        case downloadBetaVersions = "about.downloadBetaVersions"
     }
 
     func string(for key: SettingKey) -> String? {
