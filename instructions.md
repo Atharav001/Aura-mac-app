@@ -41,11 +41,15 @@ Aura/
 │   │   │   ├── NotchViewModel.swift  # @Observable class for hover, expand, swipe
 │   │   │   └── MediaTracker.swift    # MPNowPlayingInfoCenter integration
 │   │   ├── Widgets/          # Individual floating widget views
-│   │   │   ├── PomodoroWidget.swift
-│   │   │   ├── TodoWidget.swift
-│   │   │   ├── StopwatchWidget.swift
-│   │   │   ├── WidgetContainer.swift # Shared wrapper for opacity/blur sliders
-│   │   │   └── WidgetState.swift     # @Observable state for opacity, pin, present
+│   │   │   ├── PomodoroWidget.swift     # Circular progress ring + timer controls
+│   │   │   ├── PomodoroViewModel.swift  # @Observable timer logic (Combine)
+│   │   │   ├── TodoWidget.swift         # List with add/toggle/delete + confetti
+│   │   │   ├── TodoViewModel.swift      # @Observable + DataStore persistence
+│   │   │   ├── StopwatchWidget.swift    # Lap-capable stopwatch with digit rollovers
+│   │   │   ├── StopwatchViewModel.swift # @Observable 0.01s precision timer
+│   │   │   ├── WidgetContainer.swift    # Opacity (window alpha) + blur (material) sliders
+│   │   │   ├── WidgetState.swift        # @Observable state for opacity, pin, present
+│   │   │   └── ConfettiView.swift       # Glass shard particle burst effect
 │   │   ├── AudioPlayer/      # Local MP3 player logic
 │   │   │   ├── LocalAudioManager.swift
 │   │   │   └── AudioPlayerView.swift

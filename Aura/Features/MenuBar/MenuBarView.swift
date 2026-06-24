@@ -86,8 +86,10 @@ struct MenuBarView: View {
                 title: "Spawn Stopwatch",
                 subtitle: "Count up timer widget"
             ) {
-                PanelManager.shared.spawnPanel(size: NSSize(width: 280, height: 200)) {
-                    StopwatchWidget()
+                PanelManager.shared.spawnPanel(size: NSSize(width: 280, height: 320)) {
+                    WidgetContainer {
+                        StopwatchWidget()
+                    }
                 }
                 MenuBarManager.shared.closePopover()
             }
@@ -106,10 +108,12 @@ struct MenuBarView: View {
                 id: "todo",
                 icon: "checklist",
                 title: "Spawn To-Do Widget",
-                subtitle: "Task list with SwiftData"
+                subtitle: "Task list with DataStore"
             ) {
                 PanelManager.shared.spawnPanel(size: NSSize(width: 320, height: 420)) {
-                    TodoWidget()
+                    WidgetContainer {
+                        TodoWidget()
+                    }
                 }
                 MenuBarManager.shared.closePopover()
             }
