@@ -80,15 +80,15 @@ struct WindowAccessor: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async {
-            self.callback(view.window)
+        DispatchQueue.main.async { [callback] in
+            callback(view.window)
         }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            self.callback(nsView.window)
+        DispatchQueue.main.async { [callback] in
+            callback(nsView.window)
         }
     }
 }

@@ -12,10 +12,13 @@ struct AuraApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = DataStore.shared
         _ = MenuBarManager.shared
+        NotchManager.shared.setup()
+        FocusManager.shared.setup()
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 

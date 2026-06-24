@@ -25,12 +25,19 @@ final class TodoViewModel {
         items[index].isCompleted.toggle()
         if items[index].isCompleted {
             completedItemID = item.id
+        } else {
+            if completedItemID == item.id {
+                completedItemID = nil
+            }
         }
         save()
     }
 
     func deleteItem(_ item: TodoItem) {
         items.removeAll { $0.id == item.id }
+        if completedItemID == item.id {
+            completedItemID = nil
+        }
         save()
     }
 

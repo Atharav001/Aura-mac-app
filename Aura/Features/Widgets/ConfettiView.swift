@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConfettiView: View {
     @State private var particles: [ConfettiPiece] = []
+    @State private var animate = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -10,19 +11,21 @@ struct ConfettiView: View {
                     RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(piece.color.opacity(0.6))
                         .frame(width: piece.size, height: piece.size * 0.6)
-                        .rotationEffect(piece.rotation)
-                        .offset(piece.offset)
-                        .opacity(piece.opacity)
+                        .rotationEffect(animate ? piece.rotation : .zero)
+                        .offset(animate ? piece.offset : .zero)
+                        .opacity(animate ? piece.opacity : 1)
                 }
             }
             .onAppear {
                 spawnBurst(in: geometry.size)
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.65, blendDuration: 0.3)) {
+                    animate = true
+                }
             }
         }
     }
 
     private func spawnBurst(in size: CGSize) {
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
         let colors: [Color] = [.blue, .cyan, .purple, .white, .mint]
 
         var newPieces: [ConfettiPiece] = []
@@ -37,7 +40,7 @@ struct ConfettiView: View {
                 offset: CGSize(width: dx, height: dy),
                 rotation: .degrees(Double.random(in: 0...720)),
                 opacity: Double.random(in: 0.3...0.8),
-                color: colors.randomElement()!,
+                color: colors.randomElement() ?? .white,
                 size: CGFloat.random(in: 4...9)
             ))
         }

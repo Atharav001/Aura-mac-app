@@ -24,7 +24,7 @@ struct PomodoroWidget: View {
                         style: StrokeStyle(lineWidth: 6, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.5), value: viewModel.progress)
+                    .animation(.linear(duration: 0.3), value: viewModel.progress)
 
                 VStack(spacing: 4) {
                     Text(viewModel.formattedTime)

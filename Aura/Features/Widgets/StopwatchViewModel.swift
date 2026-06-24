@@ -42,7 +42,7 @@ final class StopwatchViewModel {
 
     private func startTimer() {
         cancellable?.cancel()
-        cancellable = Timer.publish(every: 0.01, on: .main, in: .common)
+        cancellable = Timer.publish(every: 0.05, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 self?.tick()

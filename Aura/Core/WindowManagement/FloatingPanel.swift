@@ -20,10 +20,8 @@ final class FloatingPanel: NSPanel {
         self.isMovableByWindowBackground = true
         self.titleVisibility = .hidden
         self.titlebarAppearsTransparent = true
-        self.isReleasedWhenClosed = false
+        self.isReleasedWhenClosed = true
         self.contentView = contentView
-
-        applyIgnoresMouseEvents()
     }
 
     convenience init(rootView: some View, size: NSSize) {
@@ -34,10 +32,6 @@ final class FloatingPanel: NSPanel {
 
     func setIgnoresMouseEvents(_ flag: Bool) {
         self.ignoresMouseEvents = flag
-    }
-
-    private func applyIgnoresMouseEvents() {
-        self.ignoresMouseEvents = false
     }
 
     override var canBecomeKey: Bool { false }

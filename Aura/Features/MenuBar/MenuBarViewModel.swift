@@ -9,6 +9,8 @@ final class MenuBarViewModel {
     var isScanning = false
     var isPlaying = false
 
+    private var currentScopeAccess: (url: URL, token: Data?)?
+
     func selectMusicDirectory() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -20,9 +22,18 @@ final class MenuBarViewModel {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        url.startAccessingSecurityScopedResource()
+        currentScopeAccess?.url.stopAccessingSecurityScopedResource()
+        currentScopeAccess = (url, nil)
+
+        let didStart = url.startAccessingSecurityScopedResource()
+        if !didStart { currentScopeAccess = nil }
+
         musicDirectory = url
         scanMP3Files(in: url)
+    }
+
+    deinit {
+        currentScopeAccess?.url.stopAccessingSecurityScopedResource()
     }
 
     func refreshAudioFiles() {

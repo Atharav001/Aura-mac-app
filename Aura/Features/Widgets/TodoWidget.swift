@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TodoWidget: View {
     @State private var viewModel = TodoViewModel()
+    @State private var hoveredDelete: UUID?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -27,10 +28,9 @@ struct TodoWidget: View {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(.white.opacity(0.06))
                     )
+                    .onSubmit { viewModel.addItem() }
 
-                Button {
-                    viewModel.addItem()
-                } label: {
+                Button(action: viewModel.addItem) {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white)
@@ -97,12 +97,14 @@ struct TodoWidget: View {
                 viewModel.deleteItem(item)
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 9, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.red.opacity(hoveredDelete == item.id ? 0.7 : 0.35))
             }
             .buttonStyle(PlainButtonStyle())
-            .opacity(0)
-            .frame(width: 0)
+            .help("Delete task")
+            .onHover { hovering in
+                hoveredDelete = hovering ? item.id : nil
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)

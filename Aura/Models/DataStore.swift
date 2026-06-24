@@ -29,11 +29,11 @@ final class DataStore: @unchecked Sendable {
     }
 
     func save() {
-        lock.withLock {
-            let data = StoredData(todoItems: _todoItems, settings: _settings)
-            if let encoded = try? JSONEncoder().encode(data) {
-                try? encoded.write(to: fileURL, options: .atomic)
-            }
+        let data: StoredData = lock.withLock {
+            StoredData(todoItems: _todoItems, settings: _settings)
+        }
+        if let encoded = try? JSONEncoder().encode(data) {
+            try? encoded.write(to: fileURL, options: .atomic)
         }
     }
 

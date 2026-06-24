@@ -192,6 +192,11 @@ struct MenuBarView: View {
     private func audioFileRow(_ url: URL) -> some View {
         Button {
             viewModel.playMP3(url)
+            PanelManager.shared.spawnPanel(size: NSSize(width: 280, height: 120)) {
+                WidgetContainer {
+                    AudioPlayerView(url: url)
+                }
+            }
             MenuBarManager.shared.closePopover()
         } label: {
             HStack(spacing: 10) {

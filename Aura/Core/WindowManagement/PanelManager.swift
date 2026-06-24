@@ -5,6 +5,7 @@ final class PanelManager: @unchecked Sendable {
     static let shared = PanelManager()
 
     private var panels: [UUID: FloatingPanel] = [:]
+    private var observers: [UUID: NSObjectProtocol] = [:]
     private let lock = NSLock()
     private let snapThreshold: CGFloat = 80.0
     private let edgePadding: CGFloat = 8.0
@@ -29,27 +30,38 @@ final class PanelManager: @unchecked Sendable {
         panel.setFrameOrigin(pos)
         panel.orderFront(nil)
 
-        addDragSnapping(to: panel)
+        let observer = addDragSnapping(to: panel)
 
-        lock.withLock { panels[id] = panel }
+        lock.withLock {
+            panels[id] = panel
+            observers[id] = observer
+        }
         return id
     }
 
     func closePanel(id: UUID) {
-        let panel: FloatingPanel? = lock.withLock { panels.removeValue(forKey: id) }
+        let info: (panel: FloatingPanel?, observer: NSObjectProtocol?) = lock.withLock {
+            (panels.removeValue(forKey: id), observers.removeValue(forKey: id))
+        }
+        if let observer = info.observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
         Task { @MainActor in
-            panel?.close()
+            info.panel?.close()
         }
     }
 
     func closeAll() {
-        let allPanels: [FloatingPanel] = lock.withLock {
+        let allData: ([FloatingPanel], [NSObjectProtocol]) = lock.withLock {
             let panels = Array(self.panels.values)
+            let obs = Array(self.observers.values)
             self.panels.removeAll()
-            return panels
+            self.observers.removeAll()
+            return (panels, obs)
         }
+        allData.1.forEach { NotificationCenter.default.removeObserver($0) }
         Task { @MainActor in
-            allPanels.forEach { $0.close() }
+            allData.0.forEach { $0.close() }
         }
     }
 
@@ -57,14 +69,14 @@ final class PanelManager: @unchecked Sendable {
         lock.withLock { panels[id] }
     }
 
-    private func addDragSnapping(to panel: NSPanel) {
+    private func addDragSnapping(to panel: NSPanel) -> NSObjectProtocol {
         NotificationCenter.default.addObserver(
             forName: NSWindow.didMoveNotification,
             object: panel,
             queue: .main
         ) { [weak self] notification in
             guard let movedWindow = notification.object as? NSWindow else { return }
-            DispatchQueue.main.async {
+            Task { @MainActor [weak self] in
                 self?.snapWindowToEdge(window: movedWindow)
             }
         }
