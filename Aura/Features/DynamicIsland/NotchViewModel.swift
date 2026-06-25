@@ -1,6 +1,7 @@
 import Observation
 import AppKit
 import IOKit.ps
+import MediaPlayer
 
 @Observable
 final class NotchViewModel {
@@ -49,6 +50,9 @@ final class NotchViewModel {
     var hasMedia: Bool = false
     var sourceAppName: String = ""
     var sourceAppIcon: NSImage?
+
+    // Actual album artwork fetched via MPNowPlayingInfoCenter
+    var albumArt: NSImage?
 
     // Last track cache — persists when playback stops
     var lastTrackTitle: String = ""
@@ -123,7 +127,11 @@ final class NotchViewModel {
         sourceAppIcon = appIcon
         hasMedia = true
 
-        // Cache last track info
+        // Fetch actual album artwork from MPNowPlayingInfoCenter
+        albumArt = fetchAlbumArtwork()
+
+        // Cache last track info (only app icon, NOT album art — 
+        // album art from closed apps is no longer accessible)
         lastTrackTitle = title
         lastTrackArtist = artist
         lastTrackIcon = appIcon
@@ -133,6 +141,19 @@ final class NotchViewModel {
         if isHovering {
             state = .media
         }
+    }
+
+    private func fetchAlbumArtwork() -> NSImage? {
+        if let nowPlaying = MPNowPlayingInfoCenter.default().nowPlayingInfo,
+           let artwork = nowPlaying[MPMediaItemPropertyArtwork] as? MPMediaItemArtwork {
+            return artwork.image(at: CGSize(width: 120, height: 120))
+        }
+        return nil
+    }
+
+    /// Best image for the current track: actual album art if accessible, app icon otherwise
+    var displayArt: NSImage? {
+        albumArt ?? sourceAppIcon
     }
 
     func hideMedia() {

@@ -158,7 +158,7 @@ struct NotchView: View {
     private var currentTrackView: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                albumArtView(icon: viewModel.sourceAppIcon, source: viewModel.mediaSource)
+                albumArtView(icon: viewModel.displayArt, source: viewModel.mediaSource)
                     .frame(width: 38, height: 38)
 
                 VStack(alignment: .leading, spacing: 1) {
