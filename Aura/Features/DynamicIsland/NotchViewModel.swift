@@ -112,6 +112,9 @@ final class NotchViewModel {
         }
     }
 
+    private var albumArtRetryCount = 0
+    private var albumArtTimer: DispatchSourceTimer?
+
     func showMedia(title: String, artist: String, isPlaying: Bool, progress: Double, duration: TimeInterval, source: MediaSource = .local, appName: String = "", appIcon: NSImage? = nil) {
         nowPlayingTitle = title
         nowPlayingArtist = artist
@@ -123,11 +126,13 @@ final class NotchViewModel {
         sourceAppIcon = appIcon
         hasMedia = true
 
-        // Fetch actual album artwork from MPNowPlayingInfoCenter
+        // Fetch actual album artwork from MPNowPlayingInfoCenter with retry
         albumArt = fetchAlbumArtwork()
+        if albumArt == nil {
+            startAlbumArtRetry()
+        }
 
-        // Cache last track info (only app icon, NOT album art — 
-        // album art from closed apps is no longer accessible)
+        // Cache last track info (only app icon, NOT album art)
         lastTrackTitle = title
         lastTrackArtist = artist
         lastTrackIcon = appIcon
@@ -139,12 +144,40 @@ final class NotchViewModel {
         }
     }
 
+    private func startAlbumArtRetry() {
+        albumArtRetryCount = 0
+        albumArtTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+        timer.schedule(deadline: .now() + 0.3, repeating: 0.3, leeway: .milliseconds(50))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            if let art = self.fetchAlbumArtwork() {
+                self.albumArt = art
+                self.albumArtTimer?.cancel()
+                self.albumArtTimer = nil
+            } else {
+                self.albumArtRetryCount += 1
+                if self.albumArtRetryCount >= 8 {
+                    self.albumArtTimer?.cancel()
+                    self.albumArtTimer = nil
+                }
+            }
+        }
+        albumArtTimer = timer
+        timer.resume()
+    }
+
     private func fetchAlbumArtwork() -> NSImage? {
         if let nowPlaying = MPNowPlayingInfoCenter.default().nowPlayingInfo,
            let artwork = nowPlaying[MPMediaItemPropertyArtwork] as? MPMediaItemArtwork {
             return artwork.image(at: CGSize(width: 120, height: 120))
         }
         return nil
+    }
+
+    func clearAlbumArtRetry() {
+        albumArtTimer?.cancel()
+        albumArtTimer = nil
     }
 
     /// Best image for the current track: actual album art if accessible, app icon otherwise

@@ -7,6 +7,11 @@ struct CalendarEventItem: Identifiable, Equatable {
     let startDate: Date
     let endDate: Date
     let isAllDay: Bool
+    let calendarColor: CGColor?
+
+    static func == (lhs: CalendarEventItem, rhs: CalendarEventItem) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 @MainActor
@@ -66,7 +71,8 @@ final class CalendarService {
                     title: event.title,
                     startDate: event.startDate,
                     endDate: event.endDate,
-                    isAllDay: event.isAllDay
+                    isAllDay: event.isAllDay,
+                    calendarColor: event.calendar.cgColor
                 )
             }
     }
