@@ -338,7 +338,7 @@ struct NotchView: View {
     private var upcomingCalendarView: some View {
         VStack(spacing: 0) {
             Text("\(monthName.prefix(3)) \(dayNumber)")
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -353,21 +353,21 @@ struct NotchView: View {
 
                     VStack(spacing: 2) {
                         Text(String(weekday.prefix(2)))
-                            .font(.system(size: 7, weight: isToday ? .bold : .regular))
-                            .foregroundColor(.white.opacity(isToday ? 0.85 : 0.3))
+                            .font(.system(size: 8, weight: isToday ? .bold : .regular))
+                            .foregroundColor(.white.opacity(isToday ? 0.9 : 0.4))
                         Text("\(day)")
-                            .font(.system(size: 10, weight: isToday ? .bold : .medium))
-                            .foregroundColor(isToday ? .black : .white.opacity(0.55))
-                            .frame(width: 26, height: 20)
+                            .font(.system(size: 12, weight: isToday ? .bold : .medium))
+                            .foregroundColor(isToday ? .black : .white.opacity(0.6))
+                            .frame(width: 30, height: 24)
                             .background(isToday ? Color.white : Color.clear)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture { CalendarService.openCalendarApp() }
                 }
             }
 
-            Spacer().frame(height: 6)
+            Spacer().frame(height: 8)
 
             if !eventItems.isEmpty {
                 VStack(spacing: 3) {
@@ -375,24 +375,24 @@ struct NotchView: View {
                         HStack(spacing: 3) {
                             Circle()
                                 .fill(item.calendarColor.map { Color(cgColor: $0) } ?? .red)
-                                .frame(width: 5, height: 5)
+                                .frame(width: 6, height: 6)
                             Text(item.title)
-                                .font(.system(size: 7))
-                                .foregroundColor(.white.opacity(0.55))
+                                .font(.system(size: 8))
+                                .foregroundColor(.white.opacity(0.6))
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                             if !item.isAllDay {
                                 Text(formatTime(item.startDate))
-                                    .font(.system(size: 6))
-                                    .foregroundColor(.white.opacity(0.25))
+                                    .font(.system(size: 7))
+                                    .foregroundColor(.white.opacity(0.3))
                             }
                         }
                     }
                 }
             } else {
                 Text("No Events")
-                    .font(.system(size: 7))
-                    .foregroundColor(.white.opacity(0.2))
+                    .font(.system(size: 8))
+                    .foregroundColor(.white.opacity(0.25))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
@@ -412,49 +412,50 @@ struct NotchView: View {
     // MARK: - Full Week Calendar
     private var fullWeekCalendarView: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("\(dayNumber)")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.white)
                 Text(dayOfWeek.prefix(3))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.45))
-                    .padding(.top, 3)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.top, 4)
                 Spacer()
                 Text(monthName)
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundColor(.white.opacity(0.3))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.35))
             }
 
-            Spacer().frame(height: 6)
+            Spacer().frame(height: 10)
 
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 ForEach(0..<7, id: \.self) { i in
                     Text(String(weekdaySymbols[i].prefix(2)))
-                        .font(.system(size: 6, weight: i == weekDayIndex ? .bold : .regular))
-                        .foregroundColor(i == weekDayIndex ? .white : .white.opacity(0.25))
+                        .font(.system(size: 8, weight: i == weekDayIndex ? .bold : .regular))
+                        .foregroundColor(i == weekDayIndex ? .white : .white.opacity(0.3))
                         .frame(maxWidth: .infinity)
                 }
             }
 
-            Spacer().frame(height: 4)
+            Spacer().frame(height: 6)
 
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 ForEach(0..<7, id: \.self) { i in
                     let day = i - firstWeekdayOfMonth + 1
                     if day > 0 && day <= daysInMonth {
-                        VStack(spacing: 1) {
+                        VStack(spacing: 2) {
                             Text("\(day)")
-                                .font(.system(size: 7, weight: day == dayNumber ? .bold : .regular))
-                                .foregroundColor(day == dayNumber ? .black : .white.opacity(0.4))
-                                .frame(width: 18, height: 16)
+                                .font(.system(size: 9, weight: day == dayNumber ? .bold : .regular))
+                                .foregroundColor(day == dayNumber ? .black : .white.opacity(0.5))
+                                .frame(width: 22, height: 20)
                                 .background(day == dayNumber ? Color.white : Color.clear)
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .clipShape(RoundedRectangle(cornerRadius: 5))
                                 .overlay(alignment: .bottom) {
                                     if eventDays.contains(day) {
                                         Circle()
-                                            .fill(.red.opacity(0.7))
-                                            .frame(width: 2.5, height: 2.5)
+                                            .fill(.red.opacity(0.8))
+                                            .frame(width: 3, height: 3)
+                                            .offset(y: -1)
                                     }
                                 }
                         }
@@ -468,31 +469,31 @@ struct NotchView: View {
                 }
             }
 
-            Spacer().frame(height: 6)
+            Spacer().frame(height: 10)
 
-            HStack(spacing: 3) {
+            HStack(spacing: 4) {
                 if !eventDays.isEmpty {
                     let todayHas = eventDays.contains(dayNumber)
                     if todayHas {
-                        Circle().fill(.red).frame(width: 3, height: 3)
+                        Circle().fill(.red).frame(width: 4, height: 4)
                         Text("Events today")
-                            .font(.system(size: 7))
-                            .foregroundColor(.red.opacity(0.65))
+                            .font(.system(size: 9))
+                            .foregroundColor(.red.opacity(0.7))
                     }
                     Text("\(eventDays.count) day\(eventDays.count == 1 ? "" : "s")")
-                        .font(.system(size: 7))
-                        .foregroundColor(.white.opacity(0.25))
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.3))
                 } else {
                     Text("No Events")
-                        .font(.system(size: 7))
-                        .foregroundColor(.white.opacity(0.2))
+                        .font(.system(size: 9))
+                        .foregroundColor(.white.opacity(0.25))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: 0)
         }
-        .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+        .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
         .frame(maxHeight: .infinity, alignment: .top)
         .onTapGesture { CalendarService.openCalendarApp() }
     }
