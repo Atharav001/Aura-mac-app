@@ -24,11 +24,12 @@ struct NotchDetector {
     static func expandedRect(screen: NSScreen? = nil) -> CGRect {
         let notch = notchRect(screen: screen)
         guard notch != .zero else { return .zero }
+        let width: CGFloat = DataStore.shared.bool(for: .extendNotchWidth, default: true) ? 520 : 400
         return CGRect(
-            x: notch.midX - 200,
-            y: notch.minY - 160,
-            width: 400,
-            height: notch.height + 160
+            x: notch.midX - width / 2,
+            y: notch.minY - 180,
+            width: width,
+            height: notch.height + 180
         )
     }
 

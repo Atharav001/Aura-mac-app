@@ -30,6 +30,8 @@ extension DataStore {
         case spotifyEnabled = "integrations.spotify"
         case appleMusicEnabled = "integrations.appleMusic"
 
+        case extendNotchWidth = "general.extendNotchWidth"
+
         // General
         case extendHoverArea = "general.extendHoverArea"
         case enableHaptics = "general.enableHaptics"

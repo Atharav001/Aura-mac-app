@@ -7,6 +7,7 @@ struct NotchView: View {
     @State private var systemTimer: Timer?
     @State private var appSettings = AppSettingsManager.shared
     @State private var eventDays: Set<Int> = []
+    @State private var eventItems: [CalendarEventItem] = []
 
     private let calendar = Calendar.autoupdatingCurrent
     private let weekdaySymbols = Calendar.autoupdatingCurrent.shortWeekdaySymbols
@@ -35,6 +36,13 @@ struct NotchView: View {
                 let granted = await CalendarService.shared.requestAccess()
                 if granted {
                     eventDays = CalendarService.shared.hasEventsForWeek()
+                    eventItems = CalendarService.shared.upcomingEvents()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .nowPlayingDidChange)) { _ in
+                if CalendarService.shared.authorized {
+                    eventDays = CalendarService.shared.hasEventsForWeek()
+                    eventItems = CalendarService.shared.upcomingEvents()
                 }
             }
     }
@@ -55,22 +63,17 @@ struct NotchView: View {
 
     private var innerContent: some View {
         ZStack {
+            // Always pitch black to blend with the camera notch cutout
             Color.black
-                .opacity(viewModel.state == .collapsed ? 1 : 0)
-
-            VisualEffectView(material: .sidebar, blendingMode: .behindWindow)
-                .opacity(viewModel.state == .collapsed ? 0 : 1)
 
             Group {
-                switch viewModel.state {
-                case .collapsed: EmptyView()
-                case .expanded: expandedContent
-                case .media: mediaContent
+                if viewModel.state == .expanded {
+                    expandedContent
                 }
             }
             .opacity(viewModel.state == .collapsed ? 0 : 1)
         }
-        .animation(.easeInOut(duration: 0.35), value: viewModel.state)
+        .animation(.easeInOut(duration: 0.25), value: viewModel.state)
     }
 
     // MARK: - Boring Notch Dashboard
@@ -304,8 +307,117 @@ struct NotchView: View {
         return calendar.component(.weekday, from: first) - 1
     }
 
+    private var showingUpcoming: Bool {
+        viewModel.hasMedia || !viewModel.lastTrackTitle.isEmpty
+    }
+
     @ViewBuilder
     private var calendarSection: some View {
+        if showingUpcoming && appSettings.showMediaControls {
+            upcomingCalendarView
+        } else {
+            fullWeekCalendarView
+        }
+    }
+
+    // Three-day calendar (today, tomorrow, day after) with event titles
+    private var upcomingCalendarView: some View {
+        VStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("\(dayNumber)")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+                Text(dayOfWeek.prefix(3))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.top, 4)
+            }
+
+            Text("\(monthName) \(yearNumber)")
+                .font(.system(size: 8, weight: .medium))
+                .foregroundColor(.white.opacity(0.35))
+
+            Spacer().frame(height: 2)
+
+            HStack(spacing: 10) {
+                ForEach(0..<3, id: \.self) { offset in
+                    let date = calendar.date(byAdding: .day, value: offset, to: now) ?? now
+                    let day = calendar.component(.day, from: date)
+                    let weekday = weekdaySymbols[calendar.component(.weekday, from: date) - 1]
+                    let isToday = offset == 0
+
+                    VStack(spacing: 2) {
+                        Text(String(weekday.prefix(3)))
+                            .font(.system(size: 7, weight: isToday ? .semibold : .regular))
+                            .foregroundColor(.white.opacity(isToday ? 0.9 : 0.3))
+                        Text("\(day)")
+                            .font(.system(size: 11, weight: isToday ? .bold : .medium))
+                            .foregroundColor(isToday ? .black : .white.opacity(0.6))
+                            .frame(width: 28, height: 22)
+                            .background(isToday ? Color.white : Color.clear)
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                            .overlay(alignment: .bottom) {
+                                if eventDays.contains(day) {
+                                    Circle()
+                                        .fill(Color.red.opacity(0.8))
+                                        .frame(width: 3, height: 3)
+                                        .offset(y: 1)
+                                }
+                            }
+                    }
+                    .frame(width: 38)
+                    .onTapGesture {
+                        CalendarService.openCalendarApp()
+                    }
+                }
+            }
+
+            // Upcoming event titles
+            if !eventItems.isEmpty {
+                VStack(spacing: 2) {
+                    ForEach(eventItems.prefix(3)) { item in
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(.red.opacity(0.8))
+                                .frame(width: 4, height: 4)
+                            Text(item.title)
+                                .font(.system(size: 8))
+                                .foregroundColor(.white.opacity(0.6))
+                                .lineLimit(1)
+                            if !item.isAllDay {
+                                Text(formatTime(item.startDate))
+                                    .font(.system(size: 7))
+                                    .foregroundColor(.white.opacity(0.3))
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                }
+                .padding(.top, 2)
+            } else {
+                HStack(spacing: 4) {
+                    Text("No Events Today")
+                        .font(.system(size: 8))
+                        .foregroundColor(.white.opacity(0.25))
+                }
+                .padding(.top, 2)
+            }
+        }
+        .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+        .onTapGesture {
+            CalendarService.openCalendarApp()
+        }
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.dateFormat = "h:mm a"
+        return df.string(from: date)
+    }
+
+    // Full week calendar when no music is showing
+    private var fullWeekCalendarView: some View {
         VStack(spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(dayNumber)")
@@ -433,131 +545,6 @@ struct NotchView: View {
                 .font(.system(size: size, weight: isPrimary ? .semibold : .regular))
                 .foregroundColor(isPrimary ? .white : .white.opacity(isHovered ? 0.8 : 0.45))
                 .scaleEffect(isHovered && isPrimary ? 1.1 : 1.0)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            hoveredControl = hovering ? id : nil
-        }
-    }
-
-    // MARK: - Media Expanded Content
-
-    @ViewBuilder
-    private var mediaContent: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                sourceAppIconView
-                    .frame(width: 20, height: 20)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(viewModel.nowPlayingTitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                    Text(viewModel.nowPlayingArtist)
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.55))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 4)
-
-                artworkThumbnail
-            }
-
-            progressSlider
-                .padding(.horizontal, 2)
-
-            transportControlsFull
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: hoveredControl)
-    }
-
-    @ViewBuilder
-    private var sourceAppIconView: some View {
-        if let icon = viewModel.sourceAppIcon {
-            Image(nsImage: icon)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        } else {
-            Image(systemName: viewModel.mediaSource.iconName)
-                .font(.system(size: 10))
-                .foregroundColor(.white.opacity(0.5))
-        }
-    }
-
-    @ViewBuilder
-    private var artworkThumbnail: some View {
-        RoundedRectangle(cornerRadius: 4)
-            .fill(.white.opacity(0.12))
-            .frame(width: 26, height: 26)
-            .overlay(
-                Image(systemName: "music.note")
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.4))
-            )
-    }
-
-    @ViewBuilder
-    private var progressSlider: some View {
-        Slider(
-            value: Binding(
-                get: { viewModel.progress },
-                set: { newProgress in
-                    let time = newProgress * viewModel.duration
-                    LocalAudioManager.shared.seek(to: time)
-                }
-            ),
-            in: 0...1
-        )
-        .tint(.white.opacity(hoveredControl == "slider" ? 0.55 : 0.35))
-        .controlSize(.small)
-        .disabled(!viewModel.hasMedia || viewModel.mediaSource != .local)
-        .onHover { hovering in
-            hoveredControl = hovering ? "slider" : nil
-        }
-    }
-
-    @ViewBuilder
-    private var transportControlsFull: some View {
-        HStack(spacing: 20) {
-            transportButtonFull(icon: "backward.fill", id: "back", size: 11)
-            transportButtonFull(icon: viewModel.isPlaying ? "pause.fill" : "play.fill", id: "playpause", size: 15, isPrimary: true)
-            transportButtonFull(icon: "forward.fill", id: "forward", size: 11)
-
-            Spacer()
-
-            if !viewModel.sourceAppName.isEmpty {
-                Text(viewModel.sourceAppName)
-                    .font(.system(size: 9, weight: .regular))
-                    .foregroundColor(.white.opacity(0.3))
-            }
-
-            transportButtonFull(icon: "xmark", id: "close", size: 8)
-        }
-    }
-
-    private func transportButtonFull(icon: String, id: String, size: CGFloat, isPrimary: Bool = false) -> some View {
-        let isHovered = hoveredControl == id
-        return Button {
-            if id == "playpause" {
-                viewModel.togglePlayPause()
-            } else if id == "back" {
-                viewModel.previousTrack()
-            } else if id == "forward" {
-                viewModel.nextTrack()
-            } else if id == "close" {
-                viewModel.hideMedia()
-            }
-        } label: {
-            Image(systemName: icon)
-                .font(.system(size: size, weight: isPrimary ? .semibold : .regular))
-                .foregroundColor(isPrimary ? .white : .white.opacity(isHovered ? 0.8 : 0.5))
-                .scaleEffect(isHovered && isPrimary ? 1.1 : 1.0)
-                .shadow(color: isHovered && isPrimary ? .white.opacity(0.3) : .clear, radius: 4)
         }
         .buttonStyle(.plain)
         .onHover { hovering in

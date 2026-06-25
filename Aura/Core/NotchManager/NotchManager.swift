@@ -99,7 +99,13 @@ final class NotchManager {
         guard openOnHoverEnabled else { return }
         let mouseLocation = NSEvent.mouseLocation
         let checkRect = viewModel.notchRect.insetBy(dx: extendHoverAmount, dy: extendHoverAmount)
-        let isNear = checkRect.contains(mouseLocation)
+        let isNearNotch = checkRect.contains(mouseLocation)
+
+        // Also check if mouse is over the expanded panel area
+        let isOverExpanded = viewModel.state != .collapsed &&
+            viewModel.expandedRect.insetBy(dx: 0, dy: -20).contains(mouseLocation)
+
+        let isNear = isNearNotch || isOverExpanded
 
         if isNear && !isHovering {
             isHovering = true

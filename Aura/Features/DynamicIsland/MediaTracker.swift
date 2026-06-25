@@ -142,28 +142,26 @@ final class MediaTracker: @unchecked Sendable {
     // MARK: - Browser & Fallback Detection
 
     private func pollBrowserMedia() {
-        // Check if there's active audio from known browsers
-        let browsers: [(name: String, bundleID: String)] = [
-            ("Safari", "com.apple.WebKit.WebContent"),
-            ("Chrome", "com.google.Chrome"),
-            ("Brave", "com.brave.Browser"),
-            ("Edge", "com.microsoft.edgemac"),
-            ("Opera", "com.operasoftware.Opera"),
-            ("Vivaldi", "com.vivaldi.Vivaldi")
+        let browserBundleIDs: Set<String> = [
+            "com.apple.WebKit.WebContent",
+            "com.google.Chrome",
+            "com.brave.Browser",
+            "com.microsoft.edgemac",
+            "com.operasoftware.Opera",
+            "com.vivaldi.Vivaldi"
         ]
 
-        let activeAudio = NSWorkspace.shared.runningApplications.filter { app in
-            app.activationPolicy == .regular &&
-            !app.isHidden &&
-            browsers.contains(where: { $0.bundleID == app.bundleIdentifier })
-        }
+        guard let sourceBundleID = lastInfo?.sourceApp,
+              browserBundleIDs.contains(sourceBundleID) else { return }
 
-        if activeAudio.isEmpty && lastInfo != nil {
-            // Only clear if we've been tracking a browser source
-            if lastInfo?.sourceApp.hasPrefix("com.") == true {
-                lastInfo = nil
-                onUpdate?(nil)
-            }
+        // Only clear if the source browser is no longer running
+        let appRunning = NSWorkspace.shared.runningApplications.contains(where: {
+            $0.bundleIdentifier == sourceBundleID
+        })
+
+        if !appRunning {
+            lastInfo = nil
+            onUpdate?(nil)
         }
     }
 
@@ -182,26 +180,30 @@ final class MediaTracker: @unchecked Sendable {
     // MARK: - Source App Info
 
     func sourceAppInfo() -> (bundleID: String, name: String, icon: NSImage?)? {
-        guard let app = detectActiveAudioApp(),
-              let bundleID = app.bundleIdentifier else { return nil }
-        return (bundleID, app.localizedName ?? bundleID, app.icon)
+        guard let sourceBundleID = lastInfo?.sourceApp else { return nil }
+        // Use the exact source app reported by the notification, not a random running app
+        let runningApp = NSWorkspace.shared.runningApplications.first(where: {
+            $0.bundleIdentifier == sourceBundleID
+        })
+        if let app = runningApp, let bundleID = app.bundleIdentifier {
+            return (bundleID, app.localizedName ?? bundleID, app.icon)
+        }
+        // Fallback: return bundle ID with name from a known mapping
+        let name = sourceAppNameForBundle(sourceBundleID)
+        return (sourceBundleID, name, nil)
     }
 
-    private func detectActiveAudioApp() -> NSRunningApplication? {
-        let knownAudioApps: Set<String> = [
-            "com.spotify.client",
-            "com.apple.Music",
-            "com.apple.iTunes",
-            "com.apple.WebKit.WebContent",
-            "com.google.Chrome",
-            "com.brave.Browser",
-            "com.microsoft.edgemac",
-            "com.operasoftware.Opera",
-            "com.vivaldi.Vivaldi"
-        ]
-        return NSWorkspace.shared.runningApplications.first { app in
-            guard let bundleID = app.bundleIdentifier else { return false }
-            return knownAudioApps.contains(bundleID)
+    private func sourceAppNameForBundle(_ bundleID: String) -> String {
+        switch bundleID {
+        case "com.spotify.client": return "Spotify"
+        case "com.apple.Music", "com.apple.iTunes": return "Apple Music"
+        case "com.apple.WebKit.WebContent": return "Safari"
+        case "com.google.Chrome": return "Chrome"
+        case "com.brave.Browser": return "Brave"
+        case "com.microsoft.edgemac": return "Edge"
+        case "com.operasoftware.Opera": return "Opera"
+        case "com.vivaldi.Vivaldi": return "Vivaldi"
+        default: return bundleID
         }
     }
 

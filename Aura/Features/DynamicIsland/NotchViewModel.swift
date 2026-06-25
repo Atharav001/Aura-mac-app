@@ -85,11 +85,7 @@ final class NotchViewModel {
 
     func handleHoverEnter() {
         isHovering = true
-        if hasMedia {
-            state = .media
-        } else {
-            state = .expanded
-        }
+        state = .expanded
     }
 
     func handleHoverExit() {
@@ -139,7 +135,7 @@ final class NotchViewModel {
         lastTrackAppName = appName
 
         if isHovering {
-            state = .media
+            state = .expanded
         }
     }
 
