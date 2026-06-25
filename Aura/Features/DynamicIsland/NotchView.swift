@@ -86,9 +86,11 @@ struct NotchView: View {
                     HStack(spacing: 0) {
                         musicSection
                             .frame(width: geo.size.width * 0.55)
+                            .frame(maxHeight: .infinity)
                         divider
                         calendarSection
                             .frame(width: geo.size.width * 0.45)
+                            .frame(maxHeight: .infinity)
                     }
                 }
             } else {
@@ -132,8 +134,8 @@ struct NotchView: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .frame(height: 24)
+        .padding(.horizontal, 10)
+        .frame(height: 22)
     }
 
     private func responsiveIcon(_ systemName: String, id: String, size: CGFloat) -> some View {
@@ -160,12 +162,12 @@ struct NotchView: View {
     }
 
     private var currentTrackView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 albumArtView(icon: viewModel.displayArt)
                     .frame(width: 44, height: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(viewModel.nowPlayingTitle)
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white)
@@ -177,7 +179,11 @@ struct NotchView: View {
                 }
             }
 
+            Spacer().frame(height: 6)
+
             customProgressBar(value: viewModel.progress)
+
+            Spacer().frame(height: 6)
 
             HStack(spacing: 14) {
                 responsiveButton("backward.fill", id: "back", size: 11) {
@@ -203,16 +209,17 @@ struct NotchView: View {
                 }
             }
         }
-        .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var lastTrackView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 albumArtView(icon: viewModel.lastTrackIcon)
                     .frame(width: 44, height: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(viewModel.lastTrackTitle)
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white)
@@ -224,6 +231,8 @@ struct NotchView: View {
                 }
             }
 
+            Spacer().frame(height: 6)
+
             HStack(spacing: 4) {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 7))
@@ -234,7 +243,8 @@ struct NotchView: View {
                 Spacer()
             }
         }
-        .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var noMusicPlaceholder: some View {
@@ -326,11 +336,13 @@ struct NotchView: View {
     // MARK: - Upcoming 3-Day Calendar
 
     private var upcomingCalendarView: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 0) {
             Text("\(monthName.prefix(3)) \(dayNumber)")
                 .font(.system(size: 9, weight: .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer().frame(height: 6)
 
             HStack(spacing: 0) {
                 ForEach(0..<3, id: \.self) { offset in
@@ -355,9 +367,10 @@ struct NotchView: View {
                 }
             }
 
-            // Events with calendar colors
+            Spacer().frame(height: 6)
+
             if !eventItems.isEmpty {
-                VStack(spacing: 2) {
+                VStack(spacing: 3) {
                     ForEach(Array(eventItems.prefix(3).enumerated()), id: \.element.id) { _, item in
                         HStack(spacing: 3) {
                             Circle()
@@ -382,8 +395,11 @@ struct NotchView: View {
                     .foregroundColor(.white.opacity(0.2))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            Spacer(minLength: 0)
         }
         .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+        .frame(maxHeight: .infinity, alignment: .top)
         .onTapGesture { CalendarService.openCalendarApp() }
     }
 
@@ -395,7 +411,7 @@ struct NotchView: View {
 
     // MARK: - Full Week Calendar
     private var fullWeekCalendarView: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(dayNumber)")
                     .font(.system(size: 22, weight: .bold))
@@ -410,6 +426,8 @@ struct NotchView: View {
                     .foregroundColor(.white.opacity(0.3))
             }
 
+            Spacer().frame(height: 6)
+
             HStack(spacing: 4) {
                 ForEach(0..<7, id: \.self) { i in
                     Text(String(weekdaySymbols[i].prefix(2)))
@@ -418,6 +436,8 @@ struct NotchView: View {
                         .frame(maxWidth: .infinity)
                 }
             }
+
+            Spacer().frame(height: 4)
 
             HStack(spacing: 4) {
                 ForEach(0..<7, id: \.self) { i in
@@ -448,6 +468,8 @@ struct NotchView: View {
                 }
             }
 
+            Spacer().frame(height: 6)
+
             HStack(spacing: 3) {
                 if !eventDays.isEmpty {
                     let todayHas = eventDays.contains(dayNumber)
@@ -467,9 +489,11 @@ struct NotchView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .onTapGesture { CalendarService.openCalendarApp() }
+
+            Spacer(minLength: 0)
         }
         .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+        .frame(maxHeight: .infinity, alignment: .top)
         .onTapGesture { CalendarService.openCalendarApp() }
     }
 
