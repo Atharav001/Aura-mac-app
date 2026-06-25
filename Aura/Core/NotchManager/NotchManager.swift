@@ -87,8 +87,12 @@ final class NotchManager {
         DataStore.shared.double(for: .notchHideDelay, default: 1.0)
     }
 
-    private var extendHoverAmount: CGFloat {
-        DataStore.shared.bool(for: .extendHoverArea, default: true) ? -40 : -12
+    private var hoverInset: (dx: CGFloat, dy: CGFloat) {
+        if DataStore.shared.bool(for: .extendHoverArea, default: true) {
+            (-8, -3)
+        } else {
+            (0, 0)
+        }
     }
 
     private var openOnHoverEnabled: Bool {
@@ -98,12 +102,13 @@ final class NotchManager {
     private func pollMousePosition() {
         guard openOnHoverEnabled else { return }
         let mouseLocation = NSEvent.mouseLocation
-        let checkRect = viewModel.notchRect.insetBy(dx: extendHoverAmount, dy: extendHoverAmount)
+        let inset = hoverInset
+        let checkRect = viewModel.notchRect.insetBy(dx: inset.dx, dy: inset.dy)
         let isNearNotch = checkRect.contains(mouseLocation)
 
         // Also check if mouse is over the expanded panel area
         let isOverExpanded = viewModel.state != .collapsed &&
-            viewModel.expandedRect.insetBy(dx: 0, dy: -20).contains(mouseLocation)
+            viewModel.expandedRect.insetBy(dx: 0, dy: -10).contains(mouseLocation)
 
         let isNear = isNearNotch || isOverExpanded
 
