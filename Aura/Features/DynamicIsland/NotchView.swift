@@ -65,7 +65,12 @@ struct NotchView: View {
     private var innerContent: some View {
         ZStack {
             Color.black
+
             if viewModel.state == .expanded {
+                VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
+                    .opacity(0.45)
+                    .transition(.opacity)
+
                 expandedContent
                     .transition(.opacity)
             }
