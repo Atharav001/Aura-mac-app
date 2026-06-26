@@ -18,6 +18,14 @@ import Foundation
 //    by reading it one last time via DataStore.load() and inserting into the model
 //    context via ModelContainer
 
+struct LastTrackInfo: Codable {
+    var title: String
+    var artist: String
+    var sourceBundleID: String?
+    var sourceAppName: String
+    var appIconData: Data?
+}
+
 final class DataStore: @unchecked Sendable {
     static let shared = DataStore()
 
@@ -31,6 +39,7 @@ final class DataStore: @unchecked Sendable {
 
     private var _todoItems: [TodoItem] = []
     private var _settings: [AppSettings] = []
+    private var _lastTrack: LastTrackInfo?
 
     var todoItems: [TodoItem] {
         get { lock.withLock { _todoItems } }
@@ -42,13 +51,30 @@ final class DataStore: @unchecked Sendable {
         set { lock.withLock { _settings = newValue } }
     }
 
+    var lastTrack: LastTrackInfo? {
+        get { lock.withLock { _lastTrack } }
+        set { lock.withLock { _lastTrack = newValue } }
+    }
+
     private init() {
         load()
     }
 
+    func setLastTrack(title: String, artist: String, sourceBundleID: String?, sourceAppName: String, appIconData: Data?) {
+        let info = LastTrackInfo(
+            title: title,
+            artist: artist,
+            sourceBundleID: sourceBundleID,
+            sourceAppName: sourceAppName,
+            appIconData: appIconData
+        )
+        lastTrack = info
+        save()
+    }
+
     func save() {
         let data: StoredData = lock.withLock {
-            StoredData(todoItems: _todoItems, settings: _settings)
+            StoredData(todoItems: _todoItems, settings: _settings, lastTrack: _lastTrack)
         }
         if let encoded = try? JSONEncoder().encode(data) {
             try? encoded.write(to: fileURL, options: .atomic)
@@ -63,11 +89,13 @@ final class DataStore: @unchecked Sendable {
         lock.withLock {
             _todoItems = decoded.todoItems
             _settings = decoded.settings
+            _lastTrack = decoded.lastTrack
         }
     }
 
     private struct StoredData: Codable {
         let todoItems: [TodoItem]
         let settings: [AppSettings]
+        let lastTrack: LastTrackInfo?
     }
 }

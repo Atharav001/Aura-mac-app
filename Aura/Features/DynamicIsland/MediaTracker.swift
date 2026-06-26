@@ -4,6 +4,7 @@ import MediaPlayer
 extension Notification.Name {
     static let remoteNextTrack = Notification.Name("com.aura.remoteNextTrack")
     static let remotePreviousTrack = Notification.Name("com.aura.remotePreviousTrack")
+    static let remoteTogglePlayPause = Notification.Name("com.aura.remoteTogglePlayPause")
     static let nowPlayingDidChange = Notification.Name("com.aura.nowPlayingDidChange")
 }
 

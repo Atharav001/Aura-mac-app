@@ -77,6 +77,28 @@ final class CalendarService {
             }
     }
 
+    func eventsForDay(_ date: Date) -> [CalendarEventItem] {
+        guard authorized else { return [] }
+        let cal = Calendar.autoupdatingCurrent
+        guard let dayStart = cal.startOfDay(for: date) as Date?,
+              let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else { return [] }
+
+        let predicate = store.predicateForEvents(withStart: dayStart, end: dayEnd, calendars: nil)
+        return store.events(matching: predicate)
+            .sorted { $0.startDate < $1.startDate }
+            .prefix(5)
+            .map { event in
+                CalendarEventItem(
+                    id: event.eventIdentifier ?? UUID().uuidString,
+                    title: event.title,
+                    startDate: event.startDate,
+                    endDate: event.endDate,
+                    isAllDay: event.isAllDay,
+                    calendarColor: event.calendar.cgColor
+                )
+            }
+    }
+
     func fetchCalendars() -> [EKCalendar] {
         guard authorized else { return [] }
         return store.calendars(for: .event)
