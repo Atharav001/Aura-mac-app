@@ -266,17 +266,21 @@ final class NotchViewModel {
             albumArt = img
             clearAlbumArtRetry()
         } else if title != lastTrackTitle || artist != lastTrackArtist {
-            // New track without art yet — clear stale cover, then retry MediaRemote / poll
             albumArt = nil
             albumArt = fetchAlbumArtwork()
             if albumArt == nil {
                 startAlbumArtRetry()
             }
+        } else if let artworkData = artworkData, albumArt == nil, let img = NSImage(data: artworkData) {
+            albumArt = img
         } else if albumArt == nil {
             albumArt = fetchAlbumArtwork()
             if albumArt == nil {
                 startAlbumArtRetry()
             }
+        } else if artworkData != nil, let img = NSImage(data: artworkData!) {
+            // Refresh art for same track when download completes
+            albumArt = img
         }
         extractDominantColors()
         detectAudioQuality()

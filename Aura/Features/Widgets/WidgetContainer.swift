@@ -55,6 +55,7 @@ struct WidgetContainer<Content: View>: View {
             content
                 .padding(.horizontal, 16)
                 .padding(.bottom, 14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             if showControls {
                 Divider()

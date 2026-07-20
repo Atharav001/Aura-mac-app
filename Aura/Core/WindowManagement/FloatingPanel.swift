@@ -9,8 +9,6 @@ final class FloatingPanel: NSPanel {
     init(contentView: NSView, size: NSSize) {
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
-            // Borderless: no system traffic lights floating over clear chrome.
-            // Resizable from edges/corners. Custom close lives in WidgetContainer.
             styleMask: [.nonactivatingPanel, .borderless, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -27,14 +25,18 @@ final class FloatingPanel: NSPanel {
         isReleasedWhenClosed = true
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
-        minSize = NSSize(width: 200, height: 140)
-        maxSize = NSSize(width: 900, height: 900)
+        contentMinSize = NSSize(width: 220, height: 180)
+        minSize = NSSize(width: 220, height: 180)
+        maxSize = NSSize(width: 700, height: 800)
         self.contentView = contentView
+        contentView.autoresizingMask = [.width, .height]
     }
 
     convenience init(rootView: some View, size: NSSize) {
         let hosting = NSHostingView(rootView: rootView)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
+        hosting.frame = NSRect(origin: .zero, size: size)
+        // Critical: hosting must resize with the panel when dragging edges
+        hosting.autoresizingMask = [.width, .height]
         self.init(contentView: hosting, size: size)
     }
 
@@ -55,11 +57,5 @@ final class FloatingPanel: NSPanel {
             return true
         }
         return super.performKeyEquivalent(with: event)
-    }
-}
-
-extension CGFloat {
-    func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
-        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }

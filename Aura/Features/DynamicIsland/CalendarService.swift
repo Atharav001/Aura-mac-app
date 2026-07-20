@@ -8,6 +8,7 @@ struct CalendarEventItem: Identifiable, Equatable {
     let endDate: Date
     let isAllDay: Bool
     let calendarColor: CGColor?
+    let calendarName: String
 
     static func == (lhs: CalendarEventItem, rhs: CalendarEventItem) -> Bool {
         lhs.id == rhs.id
@@ -34,6 +35,12 @@ final class CalendarService {
         return authorized
     }
 
+    /// All calendars the user has enabled in Calendar.app
+    func fetchCalendars() -> [EKCalendar] {
+        guard authorized else { return [] }
+        return store.calendars(for: .event)
+    }
+
     func hasEventsForWeek() -> Set<Int> {
         guard authorized else { return [] }
         let cal = Calendar.autoupdatingCurrent
@@ -42,66 +49,57 @@ final class CalendarService {
               let weekEnd = cal.date(byAdding: .day, value: 7, to: weekStart) else { return [] }
 
         let predicate = store.predicateForEvents(withStart: weekStart, end: weekEnd, calendars: nil)
-        let events = store.events(matching: predicate)
-
-        var daysWithEvents = Set<Int>()
-        for event in events {
-            let day = cal.component(.day, from: event.startDate)
-            daysWithEvents.insert(day)
+        var days = Set<Int>()
+        for event in store.events(matching: predicate) {
+            days.insert(cal.component(.day, from: event.startDate))
         }
-        return daysWithEvents
+        return days
     }
 
-    func upcomingEvents(for days: Int = 3) -> [CalendarEventItem] {
+    /// Upcoming events across every calendar (scrollable — no tiny prefix cap)
+    func upcomingEvents(for days: Int = 14) -> [CalendarEventItem] {
         guard authorized else { return [] }
         let cal = Calendar.autoupdatingCurrent
-        let today = Date()
-        guard let endDate = cal.date(byAdding: .day, value: days, to: today) else { return [] }
-
-        let predicate = store.predicateForEvents(withStart: today, end: endDate, calendars: nil)
-        let events = store.events(matching: predicate)
-            .filter { $0.startDate >= today.addingTimeInterval(-3600) }
-
-        return events
-            .sorted { $0.startDate < $1.startDate }
-            .prefix(5)
-            .map { event in
-                CalendarEventItem(
-                    id: event.eventIdentifier ?? UUID().uuidString,
-                    title: event.title,
-                    startDate: event.startDate,
-                    endDate: event.endDate,
-                    isAllDay: event.isAllDay,
-                    calendarColor: event.calendar.cgColor
-                )
-            }
+        let start = cal.startOfDay(for: Date())
+        guard let end = cal.date(byAdding: .day, value: days, to: start) else { return [] }
+        return events(from: start, to: end)
     }
 
     func eventsForDay(_ date: Date) -> [CalendarEventItem] {
         guard authorized else { return [] }
         let cal = Calendar.autoupdatingCurrent
-        guard let dayStart = cal.startOfDay(for: date) as Date?,
-              let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else { return [] }
+        let dayStart = cal.startOfDay(for: date)
+        guard let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else { return [] }
+        return events(from: dayStart, to: dayEnd)
+    }
 
-        let predicate = store.predicateForEvents(withStart: dayStart, end: dayEnd, calendars: nil)
+    func eventsForWeek(containing date: Date = Date()) -> [CalendarEventItem] {
+        guard authorized else { return [] }
+        let cal = Calendar.autoupdatingCurrent
+        let weekday = cal.component(.weekday, from: date)
+        guard let weekStart = cal.date(byAdding: .day, value: -(weekday - 1), to: cal.startOfDay(for: date)),
+              let weekEnd = cal.date(byAdding: .day, value: 7, to: weekStart) else { return [] }
+        return events(from: weekStart, to: weekEnd)
+    }
+
+    private func events(from start: Date, to end: Date) -> [CalendarEventItem] {
+        // calendars: nil → every calendar in Calendar.app
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
+        let hideAllDay = DataStore.shared.bool(for: .hideAllDayEvents, default: false)
         return store.events(matching: predicate)
+            .filter { !hideAllDay || !$0.isAllDay }
             .sorted { $0.startDate < $1.startDate }
-            .prefix(5)
             .map { event in
                 CalendarEventItem(
                     id: event.eventIdentifier ?? UUID().uuidString,
-                    title: event.title,
+                    title: event.title ?? "Untitled",
                     startDate: event.startDate,
                     endDate: event.endDate,
                     isAllDay: event.isAllDay,
-                    calendarColor: event.calendar.cgColor
+                    calendarColor: event.calendar.cgColor,
+                    calendarName: event.calendar.title
                 )
             }
-    }
-
-    func fetchCalendars() -> [EKCalendar] {
-        guard authorized else { return [] }
-        return store.calendars(for: .event)
     }
 
     static func openCalendarApp() {

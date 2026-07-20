@@ -46,34 +46,39 @@ final class NotchManager {
         setupMiddleClickHandler()
         setupSystemHUDMonitoring()
         setupDragToShelfDetection()
-        MediaTracker.shared.startTracking()
+
+        // Wire callback BEFORE tracking so the first poll is not dropped
         MediaTracker.shared.onUpdate = { [weak self] info in
             guard let self else { return }
-            if let info {
-                let sourceInfo = MediaTracker.shared.sourceAppInfo()
-                let source: NotchViewModel.MediaSource
-                if let bundleID = sourceInfo?.bundleID {
-                    source = .system(bundleID: bundleID)
+            Task { @MainActor in
+                if let info {
+                    let sourceInfo = MediaTracker.shared.sourceAppInfo()
+                    let source: NotchViewModel.MediaSource
+                    if let bundleID = sourceInfo?.bundleID ?? Optional(info.sourceApp) {
+                        source = .system(bundleID: bundleID)
+                    } else {
+                        source = .local
+                    }
+                    self.viewModel.showMedia(
+                        title: info.title,
+                        artist: info.artist,
+                        isPlaying: info.isPlaying,
+                        progress: info.duration > 0 ? info.elapsedTime / info.duration : 0,
+                        duration: info.duration,
+                        source: source,
+                        appName: sourceInfo?.name ?? (info.sourceApp == "com.spotify.client" ? "Spotify" : "Apple Music"),
+                        appIcon: sourceInfo?.icon,
+                        artworkData: info.artworkData,
+                        isShuffled: info.isShuffled,
+                        isRepeating: info.isRepeating
+                    )
                 } else {
-                    source = .local
+                    self.viewModel.hideMedia()
                 }
-                viewModel.showMedia(
-                    title: info.title,
-                    artist: info.artist,
-                    isPlaying: info.isPlaying,
-                    progress: info.duration > 0 ? info.elapsedTime / info.duration : 0,
-                    duration: info.duration,
-                    source: source,
-                    appName: sourceInfo?.name ?? "",
-                    appIcon: sourceInfo?.icon,
-                    artworkData: info.artworkData,
-                    isShuffled: info.isShuffled,
-                    isRepeating: info.isRepeating
-                )
-            } else {
-                viewModel.hideMedia()
             }
         }
+        MediaTracker.shared.startTracking()
+        MediaTracker.shared.refreshNow()
 
         screenChangeObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,

@@ -15,6 +15,7 @@ struct NotchView: View {
     @State private var dragOverShelf = false
     @State private var pomodoroModel = PomodoroViewModel()
     @State private var gestureOffset: CGFloat = 0
+    @State private var weekEventKeys: Set<String> = []
 
     private let calendar = Calendar.autoupdatingCurrent
     private let weekdaySymbols = Calendar.autoupdatingCurrent.shortWeekdaySymbols
@@ -42,14 +43,15 @@ struct NotchView: View {
             .task {
                 let granted = await CalendarService.shared.requestAccess()
                 if granted {
-                    eventDays = CalendarService.shared.hasEventsForWeek()
-                    eventItems = CalendarService.shared.upcomingEvents()
+                    dayDetailDate = Date()
+                    refreshWeekEventDots()
+                    eventItems = CalendarService.shared.eventsForDay(dayDetailDate)
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .nowPlayingDidChange)) { _ in
                 if CalendarService.shared.authorized {
-                    eventDays = CalendarService.shared.hasEventsForWeek()
-                    eventItems = CalendarService.shared.upcomingEvents()
+                    refreshWeekEventDots()
+                    eventItems = CalendarService.shared.eventsForDay(dayDetailDate)
                 }
             }
             .popover(item: $selectedEvent) { event in
@@ -153,12 +155,10 @@ struct NotchView: View {
 
     private var innerContent: some View {
         ZStack(alignment: .top) {
-            // Continuous black glass from the upper screen margin (includes camera zone)
             materialOverlay
 
             if viewModel.state == .expanded {
                 VStack(spacing: 0) {
-                    // Top wing bar sits in the notch height band (flush with screen top)
                     topBar
                         .frame(height: max(notchHeight - 2, 22))
                         .padding(.top, 2)
@@ -167,9 +167,113 @@ struct NotchView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .transition(.opacity.combined(with: .move(edge: .top)))
+            } else if viewModel.hasMedia || !viewModel.lastTrackTitle.isEmpty {
+                // Collapsed live activity — Boring Notch style (art left, visualizer right)
+                collapsedLiveActivity
+                    .transition(.opacity)
             }
         }
         .animation(animationCurve, value: viewModel.state)
+        .animation(animationCurve, value: viewModel.hasMedia)
+    }
+
+    // MARK: - Collapsed live activity (art + visualizer)
+
+    private var collapsedLiveActivity: some View {
+        HStack(spacing: 0) {
+            collapsedAlbumThumb
+                .padding(.leading, 8)
+
+            Spacer(minLength: 0)
+
+            liveVisualizerBars
+                .padding(.trailing, 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var collapsedAlbumThumb: some View {
+        Group {
+            if let art = viewModel.albumArt ?? viewModel.lastTrackIcon {
+                Image(nsImage: art)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else if let icon = viewModel.sourceAppIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Circle().fill(Color.white.opacity(0.12))
+            }
+        }
+        .frame(width: 18, height: 18)
+        .clipShape(Circle())
+    }
+
+    private var liveVisualizerBars: some View {
+        TimelineView(.animation(minimumInterval: 0.12, paused: !viewModel.isPlaying)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .center, spacing: 2) {
+                ForEach(0..<4, id: \.self) { i in
+                    let phase = sin(t * 6 + Double(i) * 1.1)
+                    let h = viewModel.isPlaying ? (5 + abs(phase) * 10) : 4
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.pink.opacity(0.85), Color.white.opacity(0.9)],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
+                        .frame(width: 2.5, height: h)
+                }
+            }
+            .frame(height: 16)
+        }
+    }
+
+    // MARK: - Module switcher (Media / Calendar / Clipboard / Shelf / Focus)
+
+    private var moduleSwitcher: some View {
+        HStack(spacing: 4) {
+            ForEach(viewModel.availableTabs, id: \.self) { tab in
+                let isActive = viewModel.activeTab == tab
+                Button {
+                    withAnimation(AnimationCurves.hudSlide) {
+                        viewModel.activeTab = tab
+                    }
+                    if DataStore.shared.bool(for: .rememberLastTab, default: false) {
+                        DataStore.shared.set(key: .lastActiveTab, value: tab.rawValue)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: moduleIcon(tab))
+                            .font(.system(size: 8, weight: .semibold))
+                        Text(tab.rawValue)
+                            .font(.system(size: 8, weight: isActive ? .semibold : .medium))
+                    }
+                    .foregroundStyle(isActive ? Color.white : Color.white.opacity(0.4))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(isActive ? Color.white.opacity(0.14) : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 18)
+    }
+
+    private func moduleIcon(_ tab: NotchViewModel.NotchTab) -> String {
+        switch tab {
+        case .media: return "music.note"
+        case .calendar: return "calendar"
+        case .clipboard: return "doc.on.clipboard"
+        case .shelf: return "tray"
+        case .pomodoro: return "timer"
+        }
     }
 
     private var notchHeight: CGFloat {
@@ -197,39 +301,42 @@ struct NotchView: View {
         }
     }
 
-    /// Boring Notch body: media | calendar by default when music is present
+    /// Home (Media) shows duo media+calendar; other modules fill the body
     @ViewBuilder
     private var boringNotchBody: some View {
-        if hasMusicContent && viewModel.activeTab == .media {
+        switch viewModel.activeTab {
+        case .media:
             HStack(spacing: 0) {
                 boringMediaPane
                     .frame(maxWidth: .infinity)
-                    .padding(EdgeInsets(top: 0, leading: 10, bottom: 10, trailing: 6))
+                    .padding(EdgeInsets(top: 4, leading: 12, bottom: 12, trailing: 8))
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.06))
+                    .fill(Color.white.opacity(0.08))
                     .frame(width: 0.5)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 10)
 
                 boringCalendarPane
                     .frame(maxWidth: .infinity)
-                    .padding(EdgeInsets(top: 0, leading: 8, bottom: 10, trailing: 12))
+                    .padding(EdgeInsets(top: 4, leading: 10, bottom: 12, trailing: 14))
             }
-        } else {
-            VStack(spacing: 0) {
-                if viewModel.availableTabs.count > 1 && DataStore.shared.bool(for: .showTabs, default: true) {
-                    tabBar
-                    divider
-                }
-                tabView(for: viewModel.activeTab)
-                    .id(viewModel.activeTab)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
-                    .animation(AnimationCurves.hudSlide, value: viewModel.activeTab)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }
+            .transition(.opacity)
+        case .calendar:
+            boringCalendarPane
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .transition(.opacity)
+        default:
+            tabView(for: viewModel.activeTab)
+                .id(viewModel.activeTab)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                .animation(AnimationCurves.hudSlide, value: viewModel.activeTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -296,11 +403,20 @@ struct NotchView: View {
         HStack(spacing: 8) {
             // Left wing — Home + Shelf (Boring Notch)
             HStack(spacing: 2) {
-                wingIcon("house.fill", id: "home") {
+                wingIcon("house.fill", id: "home", active: viewModel.activeTab == .media) {
                     withAnimation(AnimationCurves.hudSlide) { viewModel.activeTab = .media }
                 }
-                wingIcon("tray.fill", id: "shelf") {
+                wingIcon("calendar", id: "cal", active: viewModel.activeTab == .calendar) {
+                    withAnimation(AnimationCurves.hudSlide) { viewModel.activeTab = .calendar }
+                }
+                wingIcon("doc.on.clipboard", id: "clip", active: viewModel.activeTab == .clipboard) {
+                    withAnimation(AnimationCurves.hudSlide) { viewModel.activeTab = .clipboard }
+                }
+                wingIcon("tray.fill", id: "shelf", active: viewModel.activeTab == .shelf) {
                     withAnimation(AnimationCurves.hudSlide) { viewModel.activeTab = .shelf }
+                }
+                wingIcon("timer", id: "focus", active: viewModel.activeTab == .pomodoro) {
+                    withAnimation(AnimationCurves.hudSlide) { viewModel.activeTab = .pomodoro }
                 }
             }
             .padding(3)
@@ -345,16 +461,21 @@ struct NotchView: View {
         .animation(AnimationCurves.hudSlide, value: viewModel.isDraggingToNotch)
     }
 
-    private func wingIcon(_ systemName: String, id: String, action: @escaping () -> Void) -> some View {
+    private func wingIcon(_ systemName: String, id: String, active: Bool = false, action: @escaping () -> Void) -> some View {
         let isHovered = hoveredControl == id
         return Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.white.opacity(isHovered ? 0.95 : 0.55))
+                .foregroundColor(active ? .white : .white.opacity(isHovered ? 0.95 : 0.5))
                 .frame(width: 22, height: 18)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(active ? Color.white.opacity(0.14) : Color.clear)
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(id)
         .onHover { h in hoveredControl = h ? id : (hoveredControl == id ? nil : hoveredControl) }
     }
 
@@ -383,34 +504,36 @@ struct NotchView: View {
             if viewModel.hasMedia {
                 boringNowPlaying
             } else if !viewModel.lastTrackTitle.isEmpty {
+                // Still show controls shell for last track, but label it clearly
                 lastTrackView
             } else {
                 noMusicPlaceholder
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var boringNowPlaying: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
                 boringAlbumArt
-                    .frame(width: 56, height: 56)
+                    .frame(width: 58, height: 58)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(viewModel.nowPlayingTitle)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Text(viewModel.nowPlayingArtist)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(accentCopper)
+                        .foregroundColor(.white.opacity(0.55))
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
 
-            VStack(spacing: 4) {
+            VStack(spacing: 5) {
                 boringProgressBar
                 HStack {
                     Text(viewModel.formattedElapsed)
@@ -424,36 +547,34 @@ struct NotchView: View {
             }
 
             if DataStore.shared.bool(for: .showMediaControls, default: true) {
-                HStack(spacing: 0) {
-                    mediaControlButton(
-                        "shuffle",
-                        id: "shuffle",
-                        active: viewModel.isShuffled
-                    ) { MediaTracker.shared.toggleShuffle() }
-                    mediaControlButton("backward.fill", id: "back") {
+                HStack(spacing: 22) {
+                    Spacer(minLength: 0)
+                    mediaControlButton("backward.fill", id: "back", size: 11) {
                         viewModel.previousTrack()
                     }
-                    mediaControlButton(
-                        viewModel.isPlaying ? "pause.fill" : "play.fill",
-                        id: "play",
-                        size: 16,
-                        primary: true
-                    ) { viewModel.togglePlayPause() }
-                    mediaControlButton("forward.fill", id: "fwd") {
+                    Button { viewModel.togglePlayPause() } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(hoveredControl == "play" ? 0.16 : 0.10))
+                                .frame(width: 34, height: 34)
+                            Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white)
+                                .offset(x: viewModel.isPlaying ? 0 : 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { h in hoveredControl = h ? "play" : (hoveredControl == "play" ? nil : hoveredControl) }
+
+                    mediaControlButton("forward.fill", id: "fwd", size: 11) {
                         viewModel.nextTrack()
                     }
-                    mediaControlButton(
-                        "repeat",
-                        id: "repeat",
-                        active: viewModel.isRepeating
-                    ) { MediaTracker.shared.toggleRepeat() }
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.top, 6)
         .gesture(
             DragGesture(minimumDistance: 24)
                 .onEnded { val in
@@ -465,38 +586,31 @@ struct NotchView: View {
 
     private var boringAlbumArt: some View {
         ZStack(alignment: .bottomTrailing) {
-            if let art = viewModel.displayArt {
-                Image(nsImage: art)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
-            } else if let icon = viewModel.sourceAppIcon {
-                // No thumbnail — show source app logo as the main image
-                Image(nsImage: icon)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 56, height: 56)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            } else {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.white.opacity(0.08))
-                    .overlay(
-                        Image(systemName: "music.note")
-                            .foregroundStyle(.white.opacity(0.25))
-                    )
-                    .frame(width: 56, height: 56)
+            Group {
+                if let art = viewModel.albumArt {
+                    Image(nsImage: art)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else if let icon = viewModel.sourceAppIcon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Color.white.opacity(0.08)
+                        .overlay(Image(systemName: "music.note").foregroundStyle(.white.opacity(0.3)))
+                }
             }
+            .frame(width: 58, height: 58)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
 
-            // Source badge only when we already have album art
-            if viewModel.hasAlbumArtwork, let icon = viewModel.sourceAppIcon {
+            if viewModel.albumArt != nil, let icon = viewModel.sourceAppIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: 16, height: 16)
                     .clipShape(Circle())
-                    .overlay(Circle().stroke(.black.opacity(0.4), lineWidth: 1))
-                    .offset(x: 2, y: 2)
+                    .overlay(Circle().stroke(Color.black.opacity(0.5), lineWidth: 1))
+                    .offset(x: 3, y: 3)
             }
         }
     }
@@ -504,9 +618,9 @@ struct NotchView: View {
     private var boringProgressBar: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.12)).frame(height: 3)
+                Capsule().fill(Color.white.opacity(0.12)).frame(height: 3)
                 Capsule()
-                    .fill(accentCopper)
+                    .fill(accentCopper.opacity(0.95))
                     .frame(width: max(3, geo.size.width * CGFloat(viewModel.progress)), height: 3)
                     .animation(.linear(duration: 0.35), value: viewModel.progress)
             }
@@ -525,14 +639,9 @@ struct NotchView: View {
         let hovered = hoveredControl == id
         return Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: size, weight: primary ? .bold : .semibold))
-                .foregroundStyle(
-                    primary ? .white
-                    : active ? accentCopper
-                    : .white.opacity(hovered ? 0.9 : 0.45)
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: 28)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(hovered ? 0.95 : 0.5))
+                .frame(width: 28, height: 28)
                 .scaleEffect(hovered ? 1.08 : 1)
         }
         .buttonStyle(.plain)
@@ -543,81 +652,161 @@ struct NotchView: View {
 
     private var boringCalendarPane: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(shortMonthYear)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.top, 4)
+            HStack(alignment: .center, spacing: 8) {
+                Text(shortMonth)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, alignment: .leading)
 
-            // Current week strip
-            HStack(spacing: 4) {
-                ForEach(currentWeekDays, id: \.self) { date in
-                    let isToday = calendar.isDateInToday(date)
-                    let day = calendar.component(.day, from: date)
-                    let weekday = calendar.component(.weekday, from: date) - 1
-                    VStack(spacing: 3) {
-                        Text(String(weekdaySymbols[weekday].prefix(3)))
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundStyle(isToday ? .white : .white.opacity(0.35))
-                        Text("\(day)")
-                            .font(.system(size: 11, weight: isToday ? .bold : .medium))
-                            .foregroundStyle(isToday ? .white : .white.opacity(0.55))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(isToday ? Color(red: 0.15, green: 0.28, blue: 0.55) : .clear)
-                    )
-                    .onTapGesture {
-                        dayDetailDate = date
-                        showDayDetail = true
+                HStack(spacing: 2) {
+                    ForEach(currentWeekDays, id: \.self) { date in
+                        let isToday = calendar.isDateInToday(date)
+                        let isSelected = calendar.isDate(date, inSameDayAs: dayDetailDate)
+                        let day = calendar.component(.day, from: date)
+                        let weekday = calendar.component(.weekday, from: date) - 1
+                        let hasEvents = dayHasEvents(date)
+                        Button {
+                            withAnimation(AnimationCurves.hudSlide) {
+                                dayDetailDate = date
+                                eventItems = CalendarService.shared.eventsForDay(date)
+                            }
+                        } label: {
+                            VStack(spacing: 2) {
+                                Text(String(weekdaySymbols[weekday].prefix(3)))
+                                    .font(.system(size: 7, weight: .medium))
+                                    .foregroundStyle(isToday || isSelected ? Color.white : Color.white.opacity(0.35))
+                                Text("\(day)")
+                                    .font(.system(size: 10, weight: isToday ? .bold : .medium))
+                                    .foregroundStyle(isToday ? Color.white : Color.white.opacity(0.6))
+                                // Dot under days that have scheduled events
+                                Circle()
+                                    .fill(hasEvents ? (isToday ? Color.white : Color.red.opacity(0.85)) : Color.clear)
+                                    .frame(width: 4, height: 4)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(isSelected
+                                          ? Color(red: 0.2, green: 0.42, blue: 0.95)
+                                          : (isToday ? Color.white.opacity(0.08) : Color.clear))
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help(hasEvents ? "View events" : "No events")
                     }
                 }
             }
 
-            Spacer(minLength: 4)
-
-            let todays = todaysEvents
-            if todays.isEmpty {
+            let list = eventsForSelectedDay
+            if list.isEmpty {
+                Spacer(minLength: 4)
                 VStack(spacing: 6) {
                     Image(systemName: "calendar.badge.checkmark")
                         .font(.system(size: 22, weight: .light))
-                        .foregroundStyle(.white.opacity(0.35))
-                    Text("No events today")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.85))
-                    Text("Enjoy your free time!")
+                        .foregroundStyle(.white.opacity(0.3))
+                    Text(calendar.isDateInToday(dayDetailDate) ? "No events today" : "No events")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.8))
+                    Text(calendar.isDateInToday(dayDetailDate) ? "Enjoy your free time!" : "Pick another day")
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.35))
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                Spacer(minLength: 0)
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(todays.prefix(3))) { item in
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(item.calendarColor.map { Color(cgColor: $0) } ?? .blue)
-                                .frame(width: 6, height: 6)
-                            Text(item.title)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.75))
-                                .lineLimit(DataStore.shared.bool(for: .calendarTitleTruncation, default: true) ? 1 : 2)
-                            Spacer(minLength: 0)
-                            if !item.isAllDay {
-                                Text(formatTime(item.startDate))
-                                    .font(.system(size: 8, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.35))
+                // Expanded event list for the selected day
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(selectedDayHeader)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.45))
+                            .padding(.bottom, 2)
+
+                        ForEach(list) { item in
+                            HStack(alignment: .top, spacing: 7) {
+                                RoundedRectangle(cornerRadius: 1.5)
+                                    .fill(item.calendarColor.map { Color(cgColor: $0) } ?? Color.blue)
+                                    .frame(width: 3, height: 32)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.title)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.9))
+                                        .lineLimit(DataStore.shared.bool(for: .calendarTitleTruncation, default: true) ? 2 : 4)
+                                    HStack(spacing: 4) {
+                                        if item.isAllDay {
+                                            Text("All day")
+                                        } else {
+                                            Text("\(formatTime(item.startDate)) – \(formatTime(item.endDate))")
+                                        }
+                                        Text("·")
+                                        Text(item.calendarName)
+                                            .lineLimit(1)
+                                    }
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(.white.opacity(0.4))
+                                }
+                                Spacer(minLength: 0)
                             }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.white.opacity(0.05))
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedEvent = item }
                         }
-                        .onTapGesture { selectedEvent = item }
                     }
                 }
             }
-
-            Spacer(minLength: 0)
         }
-        .onTapGesture { CalendarService.openCalendarApp() }
+        .onAppear {
+            dayDetailDate = Date()
+            refreshWeekEventDots()
+            eventItems = CalendarService.shared.eventsForDay(dayDetailDate)
+        }
+    }
+
+    private var selectedDayHeader: String {
+        let df = DateFormatter()
+        df.dateFormat = "EEEE, MMM d"
+        return df.string(from: dayDetailDate)
+    }
+
+    private func dayHasEvents(_ date: Date) -> Bool {
+        let day = calendar.component(.day, from: date)
+        let month = calendar.component(.month, from: date)
+        return weekEventKeys.contains("\(month)-\(day)")
+    }
+
+    private func refreshWeekEventDots() {
+        var keys = Set<String>()
+        for date in currentWeekDays {
+            let events = CalendarService.shared.eventsForDay(date)
+            if !events.isEmpty {
+                let day = calendar.component(.day, from: date)
+                let month = calendar.component(.month, from: date)
+                keys.insert("\(month)-\(day)")
+            }
+        }
+        weekEventKeys = keys
+        eventDays = Set(keys.compactMap { key -> Int? in
+            Int(key.split(separator: "-").last.map(String.init) ?? "")
+        })
+    }
+
+    private var eventsForSelectedDay: [CalendarEventItem] {
+        let hideAllDay = DataStore.shared.bool(for: .hideAllDayEvents, default: false)
+        return eventItems.filter { item in
+            calendar.isDate(item.startDate, inSameDayAs: dayDetailDate) && (!hideAllDay || !item.isAllDay)
+        }
+    }
+
+    private var shortMonth: String {
+        let df = DateFormatter()
+        df.dateFormat = "MMM"
+        return df.string(from: dayDetailDate)
     }
 
     private var shortMonthYear: String {
@@ -684,34 +873,61 @@ struct NotchView: View {
     }
 
     private var lastTrackView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                albumArtView(icon: viewModel.lastTrackIcon)
-                    .frame(width: 44, height: 44)
-                VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                boringAlbumArt
+                    .frame(width: 58, height: 58)
+                VStack(alignment: .leading, spacing: 3) {
                     Text(viewModel.lastTrackTitle)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                     Text(viewModel.lastTrackArtist)
-                        .font(.system(size: 9))
-                        .foregroundColor(.white.opacity(0.5))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.55))
                         .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 8))
+                        Text("Waiting for live sync…")
+                            .font(.system(size: 8))
+                    }
+                    .foregroundColor(.white.opacity(0.3))
                 }
+                Spacer(minLength: 0)
             }
-            Spacer().frame(height: 6)
-            HStack(spacing: 4) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 7))
-                    .foregroundColor(.white.opacity(0.25))
-                Text("Last played")
-                    .font(.system(size: 7))
-                    .foregroundColor(.white.opacity(0.25))
-                Spacer()
+
+            HStack(spacing: 22) {
+                Spacer(minLength: 0)
+                mediaControlButton("backward.fill", id: "back-last", size: 11) {
+                    MediaTracker.shared.previousTrack()
+                    MediaTracker.shared.refreshNow()
+                }
+                Button {
+                    MediaTracker.shared.togglePlayPause()
+                    MediaTracker.shared.refreshNow()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.10))
+                            .frame(width: 34, height: 34)
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .offset(x: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+                mediaControlButton("forward.fill", id: "fwd-last", size: 11) {
+                    MediaTracker.shared.nextTrack()
+                    MediaTracker.shared.refreshNow()
+                }
+                Spacer(minLength: 0)
             }
+
+            Spacer(minLength: 0)
         }
-        .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
-        .frame(maxHeight: .infinity, alignment: .top)
+        .onAppear { MediaTracker.shared.refreshNow() }
     }
 
     private var noMusicPlaceholder: some View {
