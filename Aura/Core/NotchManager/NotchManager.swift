@@ -18,19 +18,24 @@ final class NotchManager {
     private var screenChangeObserver: NSObjectProtocol?
     private var systemHUDMonitor: NSObjectProtocol?
     private var swipeMonitor: NSObjectProtocol?
+    private var notchEnabledObserver: NSObjectProtocol?
 
     private init() {}
 
     func setup() {
         viewModel.updateFrames()
-        guard viewModel.notchRect != .zero else { return }
 
-        let hostingView = NSHostingView(rootView: NotchView(viewModel: viewModel))
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-        hostingView.wantsLayer = true
-
-        panel = NotchPanel(contentView: hostingView, rect: viewModel.collapsedRect)
-        panel?.orderFront(nil)
+        if DataStore.shared.bool(for: .notchEnabled, default: true), viewModel.notchRect != .zero {
+            let hostingView = NSHostingView(rootView: NotchView(viewModel: viewModel))
+            hostingView.translatesAutoresizingMaskIntoConstraints = false
+            hostingView.wantsLayer = true
+            panel = NotchPanel(contentView: hostingView, rect: viewModel.collapsedRect)
+            panel?.orderFront(nil)
+            startMousePolling()
+            setupMiddleClickHandler()
+            setupSystemHUDMonitoring()
+            setupDragToShelfDetection()
+        }
 
         viewModel.onTogglePlayPause = {
             MediaTracker.shared.togglePlayPause()
@@ -41,11 +46,6 @@ final class NotchManager {
         viewModel.onPreviousTrack = {
             MediaTracker.shared.previousTrack()
         }
-
-        startMousePolling()
-        setupMiddleClickHandler()
-        setupSystemHUDMonitoring()
-        setupDragToShelfDetection()
 
         // Wire callback BEFORE tracking so the first poll is not dropped
         MediaTracker.shared.onUpdate = { [weak self] info in
@@ -107,6 +107,16 @@ final class NotchManager {
                     self?.setupSystemHUDMonitoring()
                 }
                 MediaTracker.shared.refreshNow()
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: .notchEnabledDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleNotchEnabledToggle()
             }
         }
 
@@ -450,6 +460,34 @@ final class NotchManager {
     private func screenDidChange() {
         viewModel.updateFrames()
         animatePanelFrame(viewModel.currentFrame, springy: false)
+    }
+
+    private func handleNotchEnabledToggle() {
+        let enabled = DataStore.shared.bool(for: .notchEnabled, default: true)
+        if enabled {
+            viewModel.updateFrames()
+            guard viewModel.notchRect != .zero else { return }
+            if panel == nil {
+                let hostingView = NSHostingView(rootView: NotchView(viewModel: viewModel))
+                hostingView.translatesAutoresizingMaskIntoConstraints = false
+                hostingView.wantsLayer = true
+                panel = NotchPanel(contentView: hostingView, rect: viewModel.collapsedRect)
+                panel?.orderFront(nil)
+                panel?.setFrame(viewModel.collapsedRect, display: true)
+                panel?.setIgnoresMouseEvents(true)
+                startMousePolling()
+                setupMiddleClickHandler()
+                setupSystemHUDMonitoring()
+                setupDragToShelfDetection()
+            }
+        } else {
+            panel?.orderOut(nil)
+            panel = nil
+            hoverTimer?.invalidate()
+            hoverTimer = nil
+            viewModel.state = .collapsed
+            viewModel.isHovering = false
+        }
     }
 
     private func refreshMediaInfo() {

@@ -180,4 +180,5 @@ extension Color {
 
 extension Notification.Name {
     static let settingsDidChange = Notification.Name("com.aura.settingsDidChange")
+    static let notchEnabledDidChange = Notification.Name("com.aura.notchEnabledDidChange")
 }

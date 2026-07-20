@@ -16,6 +16,7 @@ struct SettingsView: View {
     // General
     @State private var openNotchOnHover = DataStore.shared.bool(for: .openNotchOnHover, default: true)
     @State private var extendHoverArea = DataStore.shared.bool(for: .extendHoverArea, default: true)
+    @State private var notchEnabled = DataStore.shared.bool(for: .notchEnabled, default: true)
     @State private var rememberLastTab = DataStore.shared.bool(for: .rememberLastTab, default: false)
     @State private var minHoverDuration: Double = DataStore.shared.double(for: .notchHideDelay, default: 1.0)
     @State private var hoverExpandDelay: Double = DataStore.shared.double(for: .hoverExpandDelay, default: 0.15)
@@ -185,6 +186,12 @@ struct SettingsView: View {
                 headerWithQuit("General")
 
                 settingsCard("Notch behavior") {
+                    toggleRow("Enable notch", value: $notchEnabled) {
+                        DataStore.shared.set(key: .notchEnabled, value: $0)
+                        notifySettings()
+                        NotificationCenter.default.post(name: .notchEnabledDidChange, object: nil)
+                    }
+                    dividerRow
                     toggleRow("Open on hover", value: $openNotchOnHover) {
                         DataStore.shared.set(key: .openNotchOnHover, value: $0)
                         notifySettings()
