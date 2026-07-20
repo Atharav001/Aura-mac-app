@@ -130,7 +130,7 @@ final class NotchViewModel {
     }
 
     var duoModeEnabled: Bool {
-        DataStore.shared.bool(for: .duoModeEnabled, default: false)
+        DataStore.shared.bool(for: .duoModeEnabled, default: true)
     }
     var duoLeftContent: NotchTab = .media
     var duoRightContent: NotchTab = .calendar
@@ -232,7 +232,22 @@ final class NotchViewModel {
         }
     }
 
-    func showMedia(title: String, artist: String, isPlaying: Bool, progress: Double, duration: TimeInterval, source: MediaSource = .local, appName: String = "", appIcon: NSImage? = nil) {
+    var isShuffled: Bool = false
+    var isRepeating: Bool = false
+
+    func showMedia(
+        title: String,
+        artist: String,
+        isPlaying: Bool,
+        progress: Double,
+        duration: TimeInterval,
+        source: MediaSource = .local,
+        appName: String = "",
+        appIcon: NSImage? = nil,
+        artworkData: Data? = nil,
+        isShuffled: Bool = false,
+        isRepeating: Bool = false
+    ) {
         nowPlayingTitle = title
         nowPlayingArtist = artist
         self.isPlaying = isPlaying
@@ -243,22 +258,37 @@ final class NotchViewModel {
         sourceAppName = appName
         sourceAppIcon = appIcon
         hasMedia = true
+        self.isShuffled = isShuffled
+        self.isRepeating = isRepeating
 
-        albumArt = fetchAlbumArtwork()
-        if albumArt == nil {
-            startAlbumArtRetry()
+        // Prefer Spotify/Music artwork bytes; never treat app icon as album art
+        if let artworkData, let img = NSImage(data: artworkData) {
+            albumArt = img
+            clearAlbumArtRetry()
+        } else if title != lastTrackTitle || artist != lastTrackArtist {
+            // New track without art yet — clear stale cover, then retry MediaRemote / poll
+            albumArt = nil
+            albumArt = fetchAlbumArtwork()
+            if albumArt == nil {
+                startAlbumArtRetry()
+            }
+        } else if albumArt == nil {
+            albumArt = fetchAlbumArtwork()
+            if albumArt == nil {
+                startAlbumArtRetry()
+            }
         }
         extractDominantColors()
         detectAudioQuality()
 
         lastTrackTitle = title
         lastTrackArtist = artist
-        lastTrackIcon = appIcon
+        lastTrackIcon = albumArt ?? appIcon
         lastTrackSource = source
         lastTrackAppName = appName
 
         let bundleID = source.bundleID
-        let iconData = appIcon?.tiffRepresentation
+        let iconData = (albumArt ?? appIcon)?.tiffRepresentation
         DataStore.shared.setLastTrack(title: title, artist: artist, sourceBundleID: bundleID, sourceAppName: appName, appIconData: iconData)
 
         if isHovering {
@@ -284,7 +314,7 @@ final class NotchViewModel {
     }
 
     private func extractDominantColors() {
-        guard let art = albumArt ?? sourceAppIcon,
+        guard let art = albumArt,
               let cgImage = art.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             dominantColors = []
             return
@@ -362,12 +392,15 @@ final class NotchViewModel {
         albumArtTimer = nil
     }
 
-    var displayArt: NSImage? {
-        albumArt ?? sourceAppIcon
-    }
+    /// Album artwork only — app logo is drawn separately as a corner badge when art exists,
+    /// or as the sole image when art is missing.
+    var displayArt: NSImage? { albumArt }
+
+    var hasAlbumArtwork: Bool { albumArt != nil }
 
     func hideMedia() {
         hasMedia = false
+        // Keep last track / art for "last played" — don't wipe albumArt
         state = isHovering ? .expanded : .collapsed
     }
 

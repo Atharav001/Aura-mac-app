@@ -153,26 +153,23 @@ struct NotchView: View {
 
     private var innerContent: some View {
         ZStack(alignment: .top) {
-            Color.black
+            // Continuous black glass from the upper screen margin (includes camera zone)
+            materialOverlay
 
             if viewModel.state == .expanded {
                 VStack(spacing: 0) {
-                    notchSpacer
-                    ZStack {
-                        materialOverlay
-                        expandedContent
-                    }
-                    .frame(maxHeight: .infinity)
+                    // Top wing bar sits in the notch height band (flush with screen top)
+                    topBar
+                        .frame(height: max(notchHeight - 2, 22))
+                        .padding(.top, 2)
+
+                    boringNotchBody
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: viewModel.state)
-    }
-
-    private var notchSpacer: some View {
-        Color.black
-            .frame(height: max(notchHeight, 0))
+        .animation(animationCurve, value: viewModel.state)
     }
 
     private var notchHeight: CGFloat {
@@ -182,95 +179,58 @@ struct NotchView: View {
     @ViewBuilder
     private var materialOverlay: some View {
         let variant = DataStore.shared.string(for: .glassVariant) ?? "ios"
-        // Alcove-inspired liquid glass: deep black + progressive blur
-        LinearGradient(
-            colors: [
-                Color.black.opacity(0.92),
-                Color.black.opacity(0.78)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        Color.black.opacity(0.94)
         if variant == "clear" {
             VisualEffectView(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 0)
-                .opacity(0.35)
+                .opacity(0.4)
         } else if variant == "ios" {
             VisualEffectView(material: .hudWindow, blendingMode: .withinWindow, cornerRadius: 0)
-                .opacity(0.55)
-            // Subtle album-art bleed when media is playing
+                .opacity(0.5)
             if DataStore.shared.bool(for: .playerTinting, default: true),
                let color = viewModel.dominantColors.first {
-                Color(nsColor: color).opacity(0.12)
+                Color(nsColor: color).opacity(0.1)
                     .blendMode(.plusLighter)
             }
         } else {
             VisualEffectView(material: .sidebar, blendingMode: .withinWindow, cornerRadius: 0)
-                .opacity(0.42)
+                .opacity(0.4)
         }
     }
 
-    // MARK: - Expanded Layout
-
+    /// Boring Notch body: media | calendar by default when music is present
     @ViewBuilder
-    private var expandedContent: some View {
-        VStack(spacing: 0) {
-            topBar
-            divider
+    private var boringNotchBody: some View {
+        if hasMusicContent && viewModel.activeTab == .media {
+            HStack(spacing: 0) {
+                boringMediaPane
+                    .frame(maxWidth: .infinity)
+                    .padding(EdgeInsets(top: 0, leading: 10, bottom: 10, trailing: 6))
 
-            if viewModel.duoModeEnabled && hasMusicContent {
-                duoModeContent
-            } else {
-                tabContent
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(width: 0.5)
+                    .padding(.vertical, 8)
+
+                boringCalendarPane
+                    .frame(maxWidth: .infinity)
+                    .padding(EdgeInsets(top: 0, leading: 8, bottom: 10, trailing: 12))
+            }
+        } else {
+            VStack(spacing: 0) {
+                if viewModel.availableTabs.count > 1 && DataStore.shared.bool(for: .showTabs, default: true) {
+                    tabBar
+                    divider
+                }
+                tabView(for: viewModel.activeTab)
+                    .id(viewModel.activeTab)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
+                    .animation(AnimationCurves.hudSlide, value: viewModel.activeTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .frame(maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private var duoModeContent: some View {
-        let split = DataStore.shared.double(for: .duoModeSplit, default: 60)
-        GeometryReader { geo in
-            HStack(spacing: 6) {
-                tabView(for: viewModel.duoLeftContent)
-                    .frame(width: geo.size.width * CGFloat(split / 100) - 3)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(.white.opacity(0.05), lineWidth: 0.5)
-                    )
-
-                tabView(for: viewModel.duoRightContent)
-                    .frame(width: geo.size.width * CGFloat((100 - split) / 100) - 3)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(.white.opacity(0.05), lineWidth: 0.5)
-                    )
-            }
-        }
-        .frame(maxHeight: .infinity)
-        .animation(.spring(response: 0.4, dampingFraction: 0.65), value: viewModel.duoModeEnabled)
-    }
-
-    @ViewBuilder
-    private var tabContent: some View {
-        VStack(spacing: 0) {
-            if viewModel.availableTabs.count > 1 && DataStore.shared.bool(for: .showTabs, default: true) {
-                tabBar
-                divider
-            }
-            tabView(for: viewModel.activeTab)
-                .id(viewModel.activeTab)
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
-                ))
-                .animation(AnimationCurves.hudSlide, value: viewModel.activeTab)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        }
-        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Tab Bar
@@ -333,37 +293,69 @@ struct NotchView: View {
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack(spacing: 10) {
-            if appSettings.settingsIconInNotch {
-                responsiveIcon("gearshape", id: "settings", size: 11)
-                    .onTapGesture { PanelManager.shared.openSettingsWindow() }
+        HStack(spacing: 8) {
+            // Left wing — Home + Shelf (Boring Notch)
+            HStack(spacing: 2) {
+                wingIcon("house.fill", id: "home") {
+                    withAnimation(AnimationCurves.hudSlide) { viewModel.activeTab = .media }
+                }
+                wingIcon("tray.fill", id: "shelf") {
+                    withAnimation(AnimationCurves.hudSlide) { viewModel.activeTab = .shelf }
+                }
             }
+            .padding(3)
+            .background(Capsule().fill(.white.opacity(0.08)))
 
-            if viewModel.isDraggingToNotch {
-                Label("Drop to Shelf", systemImage: "tray.and.arrow.down.fill")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.cyan)
-                    .transition(.opacity.combined(with: .scale))
-            }
+            Spacer(minLength: 0)
 
-            Spacer()
+            // Physical camera sits in the center — leave it clear
+            Color.clear
+                .frame(width: max(viewModel.notchRect.width - 20, 120))
 
-            if appSettings.showBatteryInNotch && viewModel.batteryLevel > 0 {
-                HStack(spacing: 3) {
-                    Image(systemName: batteryIconName)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(batteryColor)
-                    if appSettings.showBatteryPercentage {
-                        Text("\(Int(viewModel.batteryLevel * 100))%")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.white.opacity(0.6))
+            Spacer(minLength: 0)
+
+            HStack(spacing: 8) {
+                if viewModel.isDraggingToNotch {
+                    Label("Drop", systemImage: "tray.and.arrow.down.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.cyan)
+                }
+
+                if appSettings.settingsIconInNotch {
+                    wingIcon("gearshape", id: "settings") {
+                        PanelManager.shared.openSettingsWindow()
+                    }
+                }
+
+                if appSettings.showBatteryInNotch && viewModel.batteryLevel > 0 {
+                    HStack(spacing: 4) {
+                        if appSettings.showBatteryPercentage {
+                            Text("\(Int(viewModel.batteryLevel * 100))%")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        Image(systemName: batteryIconName)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(batteryColor)
                     }
                 }
             }
         }
-        .padding(.horizontal, 10)
-        .frame(height: 22)
+        .padding(.horizontal, 14)
         .animation(AnimationCurves.hudSlide, value: viewModel.isDraggingToNotch)
+    }
+
+    private func wingIcon(_ systemName: String, id: String, action: @escaping () -> Void) -> some View {
+        let isHovered = hoveredControl == id
+        return Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.white.opacity(isHovered ? 0.95 : 0.55))
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { h in hoveredControl = h ? id : (hoveredControl == id ? nil : hoveredControl) }
     }
 
     private func responsiveIcon(_ systemName: String, id: String, size: CGFloat) -> some View {
@@ -376,119 +368,288 @@ struct NotchView: View {
             .onHover { h in hoveredControl = h ? id : (hoveredControl == id ? nil : hoveredControl) }
     }
 
-    // MARK: - Music Section
+    // MARK: - Boring Notch Media Pane
 
-    @ViewBuilder
-    private var musicSection: some View {
-        if viewModel.hasMedia {
-            currentTrackView
-                .gesture(
-                    DragGesture(minimumDistance: 20)
-                        .onChanged { val in
-                            gestureOffset = val.translation.width
-                        }
-                        .onEnded { val in
-                            let threshold: CGFloat = 50
-                            if val.translation.width < -threshold {
-                                viewModel.handleSwipeLeft()
-                            } else if val.translation.width > threshold {
-                                viewModel.handleSwipeRight()
-                            }
-                            gestureOffset = 0
-                        }
-                )
-                .offset(x: gestureOffset)
-                .animation(.interactiveSpring(), value: gestureOffset)
-        } else if !viewModel.lastTrackTitle.isEmpty {
-            lastTrackView
-        } else {
-            noMusicPlaceholder
+    private var accentCopper: Color {
+        if DataStore.shared.bool(for: .playerTinting, default: true),
+           let c = viewModel.dominantColors.first {
+            return Color(nsColor: c)
         }
+        return Color(red: 0.85, green: 0.68, blue: 0.52)
     }
 
-    private var currentTrackView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                albumArtView(icon: viewModel.displayArt)
-                    .frame(width: 48, height: 48)
-                    .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+    private var boringMediaPane: some View {
+        Group {
+            if viewModel.hasMedia {
+                boringNowPlaying
+            } else if !viewModel.lastTrackTitle.isEmpty {
+                lastTrackView
+            } else {
+                noMusicPlaceholder
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
 
-                VStack(alignment: .leading, spacing: 2) {
+    private var boringNowPlaying: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 12) {
+                boringAlbumArt
+                    .frame(width: 56, height: 56)
+
+                VStack(alignment: .leading, spacing: 3) {
                     Text(viewModel.nowPlayingTitle)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                     Text(viewModel.nowPlayingArtist)
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.5))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(accentCopper)
                         .lineLimit(1)
-                    if !viewModel.sourceAppName.isEmpty {
-                        Text(viewModel.sourceAppName)
-                            .font(.system(size: 8, weight: .medium))
-                            .foregroundColor(.white.opacity(0.28))
-                    }
                 }
-
-                Spacer(minLength: 4)
-
-                if viewModel.hasLossless || viewModel.hasDolbyAtmos {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        if viewModel.hasLossless {
-                            qualityBadge("Lossless", color: .orange)
-                        }
-                        if viewModel.hasDolbyAtmos {
-                            qualityBadge("Dolby Atmos", color: .cyan)
-                        }
-                    }
-                }
+                Spacer(minLength: 0)
             }
 
-            Spacer().frame(height: 8)
-
-            if DataStore.shared.bool(for: .showVisualizer, default: false) && viewModel.isPlaying {
-                spectrogramView
-                    .frame(height: 16)
-            } else {
-                customProgressBar(value: viewModel.progress)
+            VStack(spacing: 4) {
+                boringProgressBar
                 HStack {
                     Text(viewModel.formattedElapsed)
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.4))
                     Spacer()
                     Text(viewModel.formattedDuration)
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.4))
                 }
-                .padding(.top, 3)
             }
-
-            Spacer().frame(height: 8)
 
             if DataStore.shared.bool(for: .showMediaControls, default: true) {
-                HStack(spacing: 18) {
-                    responsiveButton("gobackward.10", id: "skipback", size: 11) {
-                        MediaTracker.shared.skipBackward()
-                    }
-                    responsiveButton("backward.fill", id: "back", size: 12) {
+                HStack(spacing: 0) {
+                    mediaControlButton(
+                        "shuffle",
+                        id: "shuffle",
+                        active: viewModel.isShuffled
+                    ) { MediaTracker.shared.toggleShuffle() }
+                    mediaControlButton("backward.fill", id: "back") {
                         viewModel.previousTrack()
                     }
-                    responsiveButton(
+                    mediaControlButton(
                         viewModel.isPlaying ? "pause.fill" : "play.fill",
-                        id: "playpause", size: 18, isPrimary: true
+                        id: "play",
+                        size: 16,
+                        primary: true
                     ) { viewModel.togglePlayPause() }
-                    responsiveButton("forward.fill", id: "forward", size: 12) {
+                    mediaControlButton("forward.fill", id: "fwd") {
                         viewModel.nextTrack()
                     }
-                    responsiveButton("goforward.10", id: "skipfwd", size: 11) {
-                        MediaTracker.shared.skipForward()
-                    }
-                    Spacer()
+                    mediaControlButton(
+                        "repeat",
+                        id: "repeat",
+                        active: viewModel.isRepeating
+                    ) { MediaTracker.shared.toggleRepeat() }
                 }
+                .frame(maxWidth: .infinity)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 6)
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { val in
+                    if val.translation.width < -50 { viewModel.handleSwipeLeft() }
+                    else if val.translation.width > 50 { viewModel.handleSwipeRight() }
+                }
+        )
+    }
+
+    private var boringAlbumArt: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if let art = viewModel.displayArt {
+                Image(nsImage: art)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+            } else if let icon = viewModel.sourceAppIcon {
+                // No thumbnail — show source app logo as the main image
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(.white.opacity(0.08))
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .foregroundStyle(.white.opacity(0.25))
+                    )
+                    .frame(width: 56, height: 56)
+            }
+
+            // Source badge only when we already have album art
+            if viewModel.hasAlbumArtwork, let icon = viewModel.sourceAppIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 16, height: 16)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(.black.opacity(0.4), lineWidth: 1))
+                    .offset(x: 2, y: 2)
             }
         }
-        .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
-        .frame(maxHeight: .infinity, alignment: .top)
-        .contentShape(Rectangle())
+    }
+
+    private var boringProgressBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.12)).frame(height: 3)
+                Capsule()
+                    .fill(accentCopper)
+                    .frame(width: max(3, geo.size.width * CGFloat(viewModel.progress)), height: 3)
+                    .animation(.linear(duration: 0.35), value: viewModel.progress)
+            }
+        }
+        .frame(height: 3)
+    }
+
+    private func mediaControlButton(
+        _ icon: String,
+        id: String,
+        size: CGFloat = 12,
+        primary: Bool = false,
+        active: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        let hovered = hoveredControl == id
+        return Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: size, weight: primary ? .bold : .semibold))
+                .foregroundStyle(
+                    primary ? .white
+                    : active ? accentCopper
+                    : .white.opacity(hovered ? 0.9 : 0.45)
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: 28)
+                .scaleEffect(hovered ? 1.08 : 1)
+        }
+        .buttonStyle(.plain)
+        .onHover { h in hoveredControl = h ? id : (hoveredControl == id ? nil : hoveredControl) }
+    }
+
+    // MARK: - Boring Notch Calendar Pane
+
+    private var boringCalendarPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(shortMonthYear)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.top, 4)
+
+            // Current week strip
+            HStack(spacing: 4) {
+                ForEach(currentWeekDays, id: \.self) { date in
+                    let isToday = calendar.isDateInToday(date)
+                    let day = calendar.component(.day, from: date)
+                    let weekday = calendar.component(.weekday, from: date) - 1
+                    VStack(spacing: 3) {
+                        Text(String(weekdaySymbols[weekday].prefix(3)))
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(isToday ? .white : .white.opacity(0.35))
+                        Text("\(day)")
+                            .font(.system(size: 11, weight: isToday ? .bold : .medium))
+                            .foregroundStyle(isToday ? .white : .white.opacity(0.55))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(isToday ? Color(red: 0.15, green: 0.28, blue: 0.55) : .clear)
+                    )
+                    .onTapGesture {
+                        dayDetailDate = date
+                        showDayDetail = true
+                    }
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            let todays = todaysEvents
+            if todays.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(.white.opacity(0.35))
+                    Text("No events today")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                    Text("Enjoy your free time!")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.35))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(todays.prefix(3))) { item in
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(item.calendarColor.map { Color(cgColor: $0) } ?? .blue)
+                                .frame(width: 6, height: 6)
+                            Text(item.title)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.75))
+                                .lineLimit(DataStore.shared.bool(for: .calendarTitleTruncation, default: true) ? 1 : 2)
+                            Spacer(minLength: 0)
+                            if !item.isAllDay {
+                                Text(formatTime(item.startDate))
+                                    .font(.system(size: 8, design: .monospaced))
+                                    .foregroundStyle(.white.opacity(0.35))
+                            }
+                        }
+                        .onTapGesture { selectedEvent = item }
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .onTapGesture { CalendarService.openCalendarApp() }
+    }
+
+    private var shortMonthYear: String {
+        let df = DateFormatter()
+        df.dateFormat = "MMM yyyy"
+        return df.string(from: Date())
+    }
+
+    private var currentWeekDays: [Date] {
+        let today = Date()
+        let weekday = calendar.component(.weekday, from: today)
+        let startOfWeek = calendar.date(byAdding: .day, value: -(weekday - 1), to: today) ?? today
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: startOfWeek) }
+    }
+
+    private var todaysEvents: [CalendarEventItem] {
+        let hideAllDay = DataStore.shared.bool(for: .hideAllDayEvents, default: false)
+        return eventItems.filter { item in
+            calendar.isDateInToday(item.startDate) && (!hideAllDay || !item.isAllDay)
+        }
+    }
+
+    // MARK: - Music Section (tab fallback)
+
+    @ViewBuilder
+    private var musicSection: some View {
+        boringMediaPane
+            .padding(10)
+    }
+
+    private var currentTrackView: some View {
+        boringNowPlaying
     }
 
     private func qualityBadge(_ label: String, color: Color) -> some View {
@@ -1063,11 +1224,8 @@ struct NotchView: View {
 
     @ViewBuilder
     private var calendarSection: some View {
-        if showingUpcoming && appSettings.showMediaControls {
-            upcomingCalendarView
-        } else {
-            fullWeekCalendarView
-        }
+        boringCalendarPane
+            .padding(10)
     }
 
     private var upcomingCalendarView: some View {

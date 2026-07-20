@@ -22,7 +22,6 @@ final class PanelManager: @unchecked Sendable {
     ) -> UUID {
         let panel = FloatingPanel(rootView: content(), size: size)
         panel.panelID = id
-        panel.scrollZoomEnabled = true
         panel.setAlwaysOnTop(true)
         panel.onClose = { [weak self] closedID in
             self?.closePanel(id: closedID)
@@ -82,10 +81,12 @@ final class PanelManager: @unchecked Sendable {
             object: window,
             queue: .main
         ) { [weak self] _ in
-            self?.settingsWindow = nil
-            let dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
-            if !dockVisible && (self?.panels.isEmpty == true) {
-                NSApp.setActivationPolicy(.accessory)
+            Task { @MainActor in
+                self?.settingsWindow = nil
+                let dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
+                if !dockVisible && (self?.panels.isEmpty == true) {
+                    NSApp.setActivationPolicy(.accessory)
+                }
             }
         }
 
@@ -138,27 +139,21 @@ final class PanelManager: @unchecked Sendable {
     @MainActor
     private func snapWindowToEdge(window: NSWindow) {
         guard let screenFrame = NSScreen.main?.visibleFrame else { return }
-        // Don't snap while actively resizing
         guard !window.inLiveResize else { return }
 
         let frame = window.frame
         let threshold: CGFloat = snapThreshold
         var targetOrigin = frame.origin
 
-        let snappedToLeft = frame.minX < screenFrame.minX + threshold
-        let snappedToRight = frame.maxX > screenFrame.maxX - threshold
-        let snappedToTop = frame.maxY > screenFrame.maxY - threshold
-        let snappedToBottom = frame.minY < screenFrame.minY + threshold
-
-        if snappedToLeft {
+        if frame.minX < screenFrame.minX + threshold {
             targetOrigin.x = screenFrame.minX + edgePadding
-        } else if snappedToRight {
+        } else if frame.maxX > screenFrame.maxX - threshold {
             targetOrigin.x = screenFrame.maxX - frame.width - edgePadding
         }
 
-        if snappedToTop {
+        if frame.maxY > screenFrame.maxY - threshold {
             targetOrigin.y = screenFrame.maxY - frame.height - edgePadding
-        } else if snappedToBottom {
+        } else if frame.minY < screenFrame.minY + threshold {
             targetOrigin.y = screenFrame.minY + edgePadding
         }
 

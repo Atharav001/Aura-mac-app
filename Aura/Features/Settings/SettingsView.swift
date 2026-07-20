@@ -25,9 +25,9 @@ struct SettingsView: View {
     @State private var menuBarVisible = DataStore.shared.bool(for: .menuBarIconVisible, default: true)
 
     // Display / Appearance
-    @State private var notchWidth: Double = DataStore.shared.double(for: .notchWidth, default: 520)
+    @State private var duoModeEnabled = DataStore.shared.bool(for: .duoModeEnabled, default: true)
+    @State private var notchWidth: Double = DataStore.shared.double(for: .notchWidth, default: 620)
     @State private var simulatedNotch = DataStore.shared.bool(for: .simulatedNotch, default: false)
-    @State private var duoModeEnabled = DataStore.shared.bool(for: .duoModeEnabled, default: false)
     @State private var duoModeSplit: Double = DataStore.shared.double(for: .duoModeSplit, default: 60)
     @State private var notchStyle = DataStore.shared.string(for: .notchStyle) ?? "melted"
     @State private var glassVariant = DataStore.shared.string(for: .glassVariant) ?? "ios"
@@ -314,15 +314,18 @@ struct SettingsView: View {
                         .frame(width: 160)
                         .onChange(of: notchStyle) { _, nv in
                             AppSettingsManager.shared.saveAndNotify(notchStyle: nv)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
                         }
                     }
                     dividerRow
-                    sliderRow("Width", value: $notchWidth, range: 360...640, format: { "\(Int($0))pt" }) {
+                    sliderRow("Width", value: $notchWidth, range: 360...720, format: { "\(Int($0))pt" }) {
                         DataStore.shared.set(key: .notchWidth, value: $0)
+                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
                     }
                     dividerRow
                     toggleRow("Simulate notch on non-notch displays", value: $simulatedNotch) {
                         DataStore.shared.set(key: .simulatedNotch, value: $0)
+                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
                     }
                     dividerRow
                     sliderRow("Border width", value: $borderWidth, range: 0...2.5, format: { String(format: "%.1fpt", $0) }) {
@@ -351,11 +354,13 @@ struct SettingsView: View {
                     dividerRow
                     toggleRow("Duo mode (media + calendar)", value: $duoModeEnabled) {
                         DataStore.shared.set(key: .duoModeEnabled, value: $0)
+                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
                     }
                     if duoModeEnabled {
                         dividerRow
                         sliderRow("Duo split", value: $duoModeSplit, range: 50...75, format: { "\(Int($0))/\(100 - Int($0))" }) {
                             DataStore.shared.set(key: .duoModeSplit, value: $0)
+                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
                         }
                     }
                 }
@@ -547,7 +552,7 @@ struct SettingsView: View {
                     toggleRow("Pin above other windows", value: $defaultPin) {
                         DataStore.shared.set(key: .defaultPin, value: $0)
                     }
-                    Text("Spawned widgets stay on top. Scroll to zoom · drag edges to resize · gear for opacity/blur.")
+                    Text("Spawned widgets stay on top. Drag edges or corners to resize · gear for opacity/blur.")
                         .font(.system(size: 10))
                         .foregroundColor(settingsSecondaryText)
                         .padding(.top, 8)

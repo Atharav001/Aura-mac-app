@@ -65,7 +65,10 @@ final class NotchManager {
                     duration: info.duration,
                     source: source,
                     appName: sourceInfo?.name ?? "",
-                    appIcon: sourceInfo?.icon
+                    appIcon: sourceInfo?.icon,
+                    artworkData: info.artworkData,
+                    isShuffled: info.isShuffled,
+                    isRepeating: info.isRepeating
                 )
             } else {
                 viewModel.hideMedia()
@@ -80,6 +83,25 @@ final class NotchManager {
             guard let self else { return }
             Task { @MainActor in self.screenDidChange() }
         }
+
+        NotificationCenter.default.addObserver(
+            forName: .settingsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.viewModel.updateFrames()
+                self?.animatePanelFrame(self?.viewModel.currentFrame ?? .zero, springy: false)
+                // Re-bind HUD if toggled
+                if DataStore.shared.bool(for: .replaceSystemHUD, default: false) {
+                    self?.setupSystemHUDMonitoring()
+                }
+                MediaTracker.shared.refreshNow()
+            }
+        }
+
+        // Kick an immediate Spotify/Music refresh after setup
+        MediaTracker.shared.refreshNow()
     }
 
     private func setupMiddleClickHandler() {
