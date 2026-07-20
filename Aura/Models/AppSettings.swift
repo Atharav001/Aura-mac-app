@@ -18,6 +18,7 @@ extension DataStore {
         case defaultPin = "widget.defaultPin"
 
         // Notch
+        case launchAtLogin = "launchAtLogin"
         case notchEnabled = "notch.enabled"
         case notchStyle = "notch.style"
         case notchHideDelay = "notch.hideDelay"

@@ -185,6 +185,13 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 headerWithQuit("General")
 
+                settingsCard("System") {
+                    toggleRow("Launch at login", value: Binding(
+                        get: { LaunchAtLoginManager.isEnabled },
+                        set: { LaunchAtLoginManager.isEnabled = $0 }
+                    ), onChange: { _ in })
+                }
+
                 settingsCard("Notch behavior") {
                     toggleRow("Enable notch", value: $notchEnabled) {
                         DataStore.shared.set(key: .notchEnabled, value: $0)
