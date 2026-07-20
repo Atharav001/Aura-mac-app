@@ -75,6 +75,11 @@ final class NotchManager {
                 } else {
                     self.viewModel.hideMedia()
                 }
+                // Widen / shrink collapsed chin for live activity wings
+                if self.viewModel.state == .collapsed {
+                    self.viewModel.updateFrames()
+                    self.animatePanelFrame(self.viewModel.currentFrame, springy: true)
+                }
             }
         }
         MediaTracker.shared.startTracking()
@@ -391,31 +396,52 @@ final class NotchManager {
 
     private func animatePanelFrame(_ frame: CGRect, springy: Bool = true) {
         let disableOvershoot = DataStore.shared.bool(for: .disableOvershoot, default: false)
-        if springy && !disableOvershoot {
-            let animation = CASpringAnimation(keyPath: "frameOrigin")
-            animation.damping = 14
-            animation.stiffness = 220
-            animation.mass = 1.0
-            animation.initialVelocity = 8
-            animation.duration = min(animation.settlingDuration, 0.55)
-            animation.fromValue = NSValue(point: panel?.frame.origin ?? .zero)
-            animation.toValue = NSValue(point: frame.origin)
-            panel?.animations = ["frameOrigin": animation]
+        let simpleClose = DataStore.shared.bool(for: .simpleCloseAnim, default: true)
 
-            let sizeAnimation = CASpringAnimation(keyPath: "frameSize")
-            sizeAnimation.damping = 14
-            sizeAnimation.stiffness = 220
-            sizeAnimation.mass = 1.0
-            sizeAnimation.initialVelocity = 8
-            sizeAnimation.duration = animation.duration
-            sizeAnimation.fromValue = NSValue(size: panel?.frame.size ?? .zero)
-            sizeAnimation.toValue = NSValue(size: frame.size)
-            panel?.animations["frameSize"] = sizeAnimation
+        // Boring Notch: open spring(0.42, 0.8) · close spring(0.45, 1.0) critically damped
+        let opening = springy
+        let response: CGFloat = opening ? 0.42 : (simpleClose ? 0.45 : 0.42)
+        let damping: CGFloat = opening ? 0.8 : (simpleClose || !opening ? 1.0 : 0.85)
+
+        if !disableOvershoot {
+            // Map SwiftUI spring response/damping → CASpringApproximation
+            let stiffness = pow(2 * .pi / response, 2)
+            let damp = 2 * damping * sqrt(stiffness)
+
+            let originAnim = CASpringAnimation(keyPath: "frameOrigin")
+            originAnim.stiffness = stiffness
+            originAnim.damping = damp
+            originAnim.mass = 1.0
+            originAnim.initialVelocity = opening ? 6 : 0
+            originAnim.duration = min(originAnim.settlingDuration, opening ? 0.55 : 0.42)
+            originAnim.fromValue = NSValue(point: panel?.frame.origin ?? .zero)
+            originAnim.toValue = NSValue(point: frame.origin)
+
+            let sizeAnim = CASpringAnimation(keyPath: "frameSize")
+            sizeAnim.stiffness = stiffness
+            sizeAnim.damping = damp
+            sizeAnim.mass = 1.0
+            sizeAnim.initialVelocity = opening ? 6 : 0
+            sizeAnim.duration = originAnim.duration
+            sizeAnim.fromValue = NSValue(size: panel?.frame.size ?? .zero)
+            sizeAnim.toValue = NSValue(size: frame.size)
+
+            panel?.animations = [
+                "frameOrigin": originAnim,
+                "frameSize": sizeAnim
+            ]
+        } else {
+            panel?.animations = [:]
         }
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = springy ? (disableOvershoot ? 0.28 : 0.48) : 0.28
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            if disableOvershoot {
+                context.duration = opening ? 0.28 : 0.22
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            } else {
+                context.duration = opening ? 0.48 : 0.38
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            }
             context.allowsImplicitAnimation = true
             panel?.animator().setFrame(frame, display: true)
         }

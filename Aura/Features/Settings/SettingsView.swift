@@ -23,6 +23,11 @@ struct SettingsView: View {
     @State private var windowShadow = DataStore.shared.bool(for: .windowShadow, default: true)
     @State private var dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
     @State private var menuBarVisible = DataStore.shared.bool(for: .menuBarIconVisible, default: true)
+    @State private var simpleCloseAnim = DataStore.shared.bool(for: .simpleCloseAnim, default: true)
+    @State private var cornerRadiusScaling = DataStore.shared.bool(for: .cornerRadiusScaling, default: true)
+    @State private var closeGesture = DataStore.shared.bool(for: .closeGesture, default: true)
+    @State private var notchHeightOption = DataStore.shared.string(for: .notchHeightOption) ?? "Match real notch size"
+    @State private var coloredSpectrograms = DataStore.shared.bool(for: .coloredSpectrograms, default: true)
 
     // Display / Appearance
     @State private var duoModeEnabled = DataStore.shared.bool(for: .duoModeEnabled, default: true)
@@ -33,7 +38,6 @@ struct SettingsView: View {
     @State private var glassVariant = DataStore.shared.string(for: .glassVariant) ?? "ios"
     @State private var appearanceMode = DataStore.shared.string(for: .appearanceMode) ?? "dark"
     @State private var glassEnabled = DataStore.shared.bool(for: .glassmorphismEnabled, default: true)
-    @State private var showTabs = DataStore.shared.bool(for: .showTabs, default: true)
     @State private var settingsIconInNotch = DataStore.shared.bool(for: .settingsIconInNotch, default: true)
     @State private var borderWidth: Double = DataStore.shared.double(for: .borderWidth, default: 0.5)
 
@@ -45,7 +49,7 @@ struct SettingsView: View {
 
     // Media
     @State private var showMediaControls = DataStore.shared.bool(for: .showMediaControls, default: true)
-    @State private var showVisualizer = DataStore.shared.bool(for: .showVisualizer, default: false)
+    @State private var showVisualizer = DataStore.shared.bool(for: .showVisualizer, default: true)
     @State private var skipIncrement = DataStore.shared.string(for: .skipIncrement) ?? "15s"
     @State private var playerTinting = DataStore.shared.bool(for: .playerTinting, default: true)
     @State private var blurBehindAlbum = DataStore.shared.bool(for: .blurBehindAlbum, default: true)
@@ -183,39 +187,46 @@ struct SettingsView: View {
                 settingsCard("Notch behavior") {
                     toggleRow("Open on hover", value: $openNotchOnHover) {
                         DataStore.shared.set(key: .openNotchOnHover, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Extend hover area", value: $extendHoverArea) {
                         DataStore.shared.set(key: .extendHoverArea, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Remember last tab", value: $rememberLastTab) {
                         DataStore.shared.set(key: .rememberLastTab, value: $0)
+                        notifySettings()
                     }
                 }
 
                 settingsCard("Timings") {
                     sliderRow("Expand delay", value: $hoverExpandDelay, range: 0.0...1.0, format: { String(format: "%.1fs", $0) }) {
                         DataStore.shared.set(key: .hoverExpandDelay, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     sliderRow("Hide delay", value: $minHoverDuration, range: 0.1...1.5, format: { String(format: "%.1fs", $0) }) {
                         DataStore.shared.set(key: .notchHideDelay, value: $0)
+                        notifySettings()
                     }
                 }
 
                 settingsCard("Interactions") {
                     toggleRow("Volume / brightness gestures on notch", value: $enableGestures) {
                         DataStore.shared.set(key: .enableGestures, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Swipe media tracks", value: $mediaHorizontalGestures) {
                         DataStore.shared.set(key: .mediaHorizontalGestures, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Replace system volume HUD", value: $replaceSystemHUD) {
                         DataStore.shared.set(key: .replaceSystemHUD, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     HStack {
@@ -230,6 +241,7 @@ struct SettingsView: View {
                         .frame(width: 140)
                         .onChange(of: middleClickAction) { _, nv in
                             DataStore.shared.set(key: .middleClickAction, value: nv)
+                            notifySettings()
                         }
                     }
                     .padding(.vertical, 4)
@@ -297,6 +309,7 @@ struct SettingsView: View {
                         .frame(width: 140)
                         .onChange(of: glassVariant) { _, nv in
                             DataStore.shared.set(key: .glassVariant, value: nv)
+                            notifySettings()
                         }
                     }
                     .padding(.vertical, 4)
@@ -314,53 +327,81 @@ struct SettingsView: View {
                         .frame(width: 160)
                         .onChange(of: notchStyle) { _, nv in
                             AppSettingsManager.shared.saveAndNotify(notchStyle: nv)
-                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
                         }
                     }
                     dividerRow
-                    sliderRow("Width", value: $notchWidth, range: 360...720, format: { "\(Int($0))pt" }) {
+                    sliderRow("Expanded width", value: $notchWidth, range: 360...720, format: { "\(Int($0))pt" }) {
                         DataStore.shared.set(key: .notchWidth, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
                     }
+                    dividerRow
+                    HStack {
+                        Text("Notch height").foregroundColor(.white).font(.system(size: 12))
+                        Spacer()
+                        Picker("", selection: $notchHeightOption) {
+                            Text("Match real notch").tag("Match real notch size")
+                            Text("Match menubar").tag("Match menubar height")
+                        }
+                        .labelsHidden()
+                        .frame(width: 150)
+                        .onChange(of: notchHeightOption) { _, nv in
+                            DataStore.shared.set(key: .notchHeightOption, value: nv)
+                            notifySettings()
+                        }
+                    }
+                    .padding(.vertical, 4)
                     dividerRow
                     toggleRow("Simulate notch on non-notch displays", value: $simulatedNotch) {
                         DataStore.shared.set(key: .simulatedNotch, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
                     }
                     dividerRow
                     sliderRow("Border width", value: $borderWidth, range: 0...2.5, format: { String(format: "%.1fpt", $0) }) {
                         DataStore.shared.set(key: .borderWidth, value: $0)
+                        notifySettings()
                     }
                 }
 
-                settingsCard("Layout") {
-                    toggleRow("Show tab bar", value: $showTabs) {
-                        DataStore.shared.set(key: .showTabs, value: $0)
-                    }
-                    dividerRow
+                settingsCard("Motion & layout") {
                     toggleRow("Settings icon in notch", value: $settingsIconInNotch) {
                         DataStore.shared.set(key: .settingsIconInNotch, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
                     }
                     dividerRow
-                    toggleRow("Window shadow", value: $windowShadow) {
+                    toggleRow("Window shadow when open", value: $windowShadow) {
                         DataStore.shared.set(key: .windowShadow, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
+                    }
+                    dividerRow
+                    toggleRow("Scale corners when expanding", value: $cornerRadiusScaling) {
+                        DataStore.shared.set(key: .cornerRadiusScaling, value: $0)
+                        notifySettings()
+                    }
+                    dividerRow
+                    toggleRow("Simple close (no bounce)", value: $simpleCloseAnim) {
+                        DataStore.shared.set(key: .simpleCloseAnim, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Disable spring overshoot", value: $disableOvershoot) {
                         DataStore.shared.set(key: .disableOvershoot, value: $0)
+                        notifySettings()
+                    }
+                    dividerRow
+                    toggleRow("Swipe up to close", value: $closeGesture) {
+                        DataStore.shared.set(key: .closeGesture, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Duo mode (media + calendar)", value: $duoModeEnabled) {
                         DataStore.shared.set(key: .duoModeEnabled, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
                     }
                     if duoModeEnabled {
                         dividerRow
                         sliderRow("Duo split", value: $duoModeSplit, range: 50...75, format: { "\(Int($0))/\(100 - Int($0))" }) {
                             DataStore.shared.set(key: .duoModeSplit, value: $0)
-                            NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                            notifySettings()
                         }
                     }
                 }
@@ -399,11 +440,17 @@ struct SettingsView: View {
                 settingsCard("Now Playing") {
                     toggleRow("Show controls", value: $showMediaControls) {
                         DataStore.shared.set(key: .showMediaControls, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Show visualizer", value: $showVisualizer) {
                         DataStore.shared.set(key: .showVisualizer, value: $0)
+                        notifySettings()
+                    }
+                    dividerRow
+                    toggleRow("Colored spectrogram", value: $coloredSpectrograms) {
+                        DataStore.shared.set(key: .coloredSpectrograms, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     HStack {
@@ -419,6 +466,7 @@ struct SettingsView: View {
                         .frame(width: 90)
                         .onChange(of: skipIncrement) { _, nv in
                             DataStore.shared.set(key: .skipIncrement, value: nv)
+                            notifySettings()
                         }
                     }
                     .padding(.vertical, 4)
@@ -427,10 +475,12 @@ struct SettingsView: View {
                 settingsCard("Look") {
                     toggleRow("Tint from album art", value: $playerTinting) {
                         DataStore.shared.set(key: .playerTinting, value: $0)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Blur behind album art", value: $blurBehindAlbum) {
                         DataStore.shared.set(key: .blurBehindAlbum, value: $0)
+                        notifySettings()
                     }
                 }
             }
@@ -490,12 +540,12 @@ struct SettingsView: View {
                 settingsCard("Battery") {
                     toggleRow("Show in notch", value: $showBatteryInNotch) {
                         DataStore.shared.set(key: .showBatteryInNotch, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
                     }
                     dividerRow
                     toggleRow("Show percentage", value: $showBatteryPercentage) {
                         DataStore.shared.set(key: .showBatteryPercentage, value: $0)
-                        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+                        notifySettings()
                     }
                 }
             }
@@ -615,6 +665,10 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
+
+    private func notifySettings() {
+        NotificationCenter.default.post(name: .settingsDidChange, object: nil)
+    }
 
     private func headerText(_ text: String) -> some View {
         HStack {

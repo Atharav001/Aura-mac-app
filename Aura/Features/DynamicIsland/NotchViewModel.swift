@@ -200,7 +200,10 @@ final class NotchViewModel {
     func updateFrames(screen: NSScreen? = nil) {
         notchRect = NotchDetector.notchRect(screen: screen)
         expandedRect = NotchDetector.expandedRect(screen: screen)
-        collapsedRect = NotchDetector.collapsedRect(screen: screen)
+        collapsedRect = NotchDetector.collapsedRect(
+            screen: screen,
+            hasMedia: hasMedia || !lastTrackTitle.isEmpty
+        )
     }
 
     func handleHoverEnter() {

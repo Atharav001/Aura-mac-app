@@ -28,7 +28,14 @@ struct NotchView: View {
         notchContent
             .frame(width: viewModel.currentFrame.width, height: viewModel.currentFrame.height)
             .animation(animationCurve, value: viewModel.state)
-            .shadow(color: shadowColor, radius: shadowRadius, x: 0, y: shadowY)
+            .shadow(
+                color: shadowColor,
+                radius: DataStore.shared.bool(for: .cornerRadiusScaling, default: true) ? 6 : 4,
+                x: 0,
+                y: shadowY
+            )
+            .scaleEffect(gestureScale, anchor: .top)
+            .simultaneousGesture(closeSwipeGesture)
             .onAppear {
                 viewModel.updateSystemInfo()
                 systemTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
@@ -54,6 +61,9 @@ struct NotchView: View {
                     eventItems = CalendarService.shared.eventsForDay(dayDetailDate)
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .settingsDidChange)) { _ in
+                appSettings.reload()
+            }
             .popover(item: $selectedEvent) { event in
                 eventPopoverContent(event).frame(width: 220)
             }
@@ -68,20 +78,43 @@ struct NotchView: View {
             }
     }
 
+    private var isExpanded: Bool { viewModel.state == .expanded || viewModel.state == .media }
+
     private var animationCurve: Animation {
-        if DataStore.shared.bool(for: .disableOvershoot, default: false) {
-            .easeInOut(duration: 0.22)
-        } else {
-            AnimationCurves.notchExpand
-        }
+        AnimationCurves.notchStateAnimation(opening: isExpanded)
+    }
+
+    private var gestureScale: CGFloat {
+        guard gestureOffset != 0 else { return 1 }
+        return max(0.88, 1 + gestureOffset * 0.0015)
+    }
+
+    private var closeSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard isExpanded,
+                      DataStore.shared.bool(for: .closeGesture, default: true) else { return }
+                // Swipe up (negative Y in SwiftUI) collapses — Boring Notch / Alcove pattern
+                if value.translation.height < 0 {
+                    gestureOffset = value.translation.height
+                }
+            }
+            .onEnded { value in
+                defer { withAnimation(AnimationCurves.notchCollapse) { gestureOffset = 0 } }
+                guard isExpanded,
+                      DataStore.shared.bool(for: .closeGesture, default: true) else { return }
+                let sensitivity = DataStore.shared.double(for: .gestureSensitivity, default: 80)
+                if value.translation.height < -sensitivity {
+                    NotchManager.shared.closeNotch()
+                }
+            }
     }
 
     private var shadowColor: Color {
-        appSettings.windowShadow ? .black.opacity(0.45) : .clear
+        (isExpanded && appSettings.windowShadow) ? .black.opacity(0.55) : .clear
     }
 
-    private var shadowRadius: CGFloat { appSettings.windowShadow ? 14 : 0 }
-    private var shadowY: CGFloat { appSettings.windowShadow ? 6 : 0 }
+    private var shadowY: CGFloat { appSettings.windowShadow ? 4 : 0 }
 
     // MARK: - System HUD Overlay
 
@@ -124,29 +157,45 @@ struct NotchView: View {
 
     @ViewBuilder
     private var notchContent: some View {
-        if appSettings.notchStyle == "pill" {
-            innerContent
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(notchBorderOverlay(shape: RoundedRectangle(cornerRadius: 14, style: .continuous)))
-        } else {
-            let s = UnevenRoundedRectangle(topLeadingRadius: 1, bottomLeadingRadius: 22, bottomTrailingRadius: 22, topTrailingRadius: 1, style: .continuous)
-            innerContent
-                .clipShape(s)
-                .overlay(notchBorderOverlay(shape: s))
-        }
+        let shape = currentNotchShape
+        innerContent
+            .clipShape(shape)
+            .overlay(alignment: .top) {
+                // 1px top fill like Boring Notch — hides anti-aliasing against camera housing
+                Rectangle()
+                    .fill(Color.black)
+                    .frame(height: 1)
+                    .padding(.horizontal, topCornerRadius)
+            }
+            .overlay {
+                if borderWidth > 0 {
+                    shape.stroke(borderColor, lineWidth: borderWidth)
+                }
+            }
     }
 
-    @ViewBuilder
-    private func notchBorderOverlay<S: InsettableShape>(shape: S) -> some View {
-        if appSettings.settingsIconInNotch {
-            shape.stroke(borderColor, lineWidth: borderWidth)
-        }
+    private var topCornerRadius: CGFloat {
+        if appSettings.notchStyle == "pill" { return isExpanded ? 14 : 12 }
+        let scaling = DataStore.shared.bool(for: .cornerRadiusScaling, default: true)
+        if isExpanded && scaling { return 6 }
+        return isExpanded ? 6 : 6
+    }
+
+    private var bottomCornerRadius: CGFloat {
+        if appSettings.notchStyle == "pill" { return isExpanded ? 14 : 12 }
+        let scaling = DataStore.shared.bool(for: .cornerRadiusScaling, default: true)
+        if isExpanded && scaling { return 22 }
+        return isExpanded ? 18 : 12
+    }
+
+    private var currentNotchShape: AuraNotchShape {
+        AuraNotchShape(topCornerRadius: topCornerRadius, bottomCornerRadius: bottomCornerRadius)
     }
 
     private var borderColor: Color {
         let saved = DataStore.shared.string(for: .borderColor) ?? ""
-        if saved.isEmpty { return .white.opacity(0.06) }
-        return Color(hex: saved) ?? .white.opacity(0.06)
+        if saved.isEmpty { return .white.opacity(0.08) }
+        return Color(hex: saved) ?? .white.opacity(0.08)
     }
 
     private var borderWidth: CGFloat {
@@ -157,7 +206,7 @@ struct NotchView: View {
         ZStack(alignment: .top) {
             materialOverlay
 
-            if viewModel.state == .expanded {
+            if isExpanded {
                 VStack(spacing: 0) {
                     topBar
                         .frame(height: max(notchHeight - 2, 22))
@@ -165,35 +214,56 @@ struct NotchView: View {
 
                     boringNotchBody
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        // BN: scale from top + opacity when revealing content
+                        .transition(
+                            .asymmetric(
+                                insertion: .scale(scale: 0.86, anchor: .top).combined(with: .opacity),
+                                removal: .opacity
+                            )
+                        )
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             } else if viewModel.hasMedia || !viewModel.lastTrackTitle.isEmpty {
-                // Collapsed live activity — Boring Notch style (art left, visualizer right)
                 collapsedLiveActivity
                     .transition(.opacity)
             }
         }
         .animation(animationCurve, value: viewModel.state)
+        .animation(AnimationCurves.contentReveal, value: viewModel.activeTab)
         .animation(animationCurve, value: viewModel.hasMedia)
     }
 
-    // MARK: - Collapsed live activity (art + visualizer)
+    // MARK: - Collapsed live activity (art left · chin · visualizer right)
 
     private var collapsedLiveActivity: some View {
         HStack(spacing: 0) {
             collapsedAlbumThumb
-                .padding(.leading, 8)
+                .padding(.leading, 10)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 4)
 
-            liveVisualizerBars
-                .padding(.trailing, 10)
+            // Physical camera chin — leave empty so art/visualizer sit in the wings
+            Color.clear
+                .frame(width: max(viewModel.notchRect.width - 36, 80))
+
+            Spacer(minLength: 4)
+
+            if DataStore.shared.bool(for: .showVisualizer, default: true) {
+                liveVisualizerBars
+                    .padding(.trailing, 12)
+            } else {
+                Image(systemName: viewModel.isPlaying ? "waveform" : "music.note")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.55))
+                    .padding(.trailing, 12)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var collapsedAlbumThumb: some View {
-        Group {
+        let size = max(14, min(20, notchHeight - 10))
+        return Group {
             if let art = viewModel.albumArt ?? viewModel.lastTrackIcon {
                 Image(nsImage: art)
                     .resizable()
@@ -203,33 +273,24 @@ struct NotchView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
-                Circle().fill(Color.white.opacity(0.12))
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
             }
         }
-        .frame(width: 18, height: 18)
-        .clipShape(Circle())
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
     }
 
     private var liveVisualizerBars: some View {
-        TimelineView(.animation(minimumInterval: 0.12, paused: !viewModel.isPlaying)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            HStack(alignment: .center, spacing: 2) {
-                ForEach(0..<4, id: \.self) { i in
-                    let phase = sin(t * 6 + Double(i) * 1.1)
-                    let h = viewModel.isPlaying ? (5 + abs(phase) * 10) : 4
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.pink.opacity(0.85), Color.white.opacity(0.9)],
-                                startPoint: .bottom,
-                                endPoint: .top
-                            )
-                        )
-                        .frame(width: 2.5, height: h)
-                }
+        let colored = DataStore.shared.bool(for: .coloredSpectrograms, default: true)
+        let playing = viewModel.isPlaying
+        let tintColor: Color = {
+            if colored, let c = viewModel.dominantColors.first {
+                return Color(nsColor: c)
             }
-            .frame(height: 16)
-        }
+            return colored ? Color.pink : Color.white
+        }()
+        return LiveVisualizerBarsView(isPlaying: playing, tint: tintColor)
     }
 
     // MARK: - Module switcher (Media / Calendar / Clipboard / Shelf / Focus)
@@ -306,21 +367,33 @@ struct NotchView: View {
     private var boringNotchBody: some View {
         switch viewModel.activeTab {
         case .media:
-            HStack(spacing: 0) {
+            if viewModel.duoModeEnabled {
+                GeometryReader { geo in
+                    let split = DataStore.shared.double(for: .duoModeSplit, default: 58) / 100
+                    let mediaW = geo.size.width * CGFloat(split)
+                    HStack(spacing: 0) {
+                        boringMediaPane
+                            .frame(width: mediaW)
+                            .padding(EdgeInsets(top: 4, leading: 12, bottom: 12, trailing: 8))
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(width: 0.5)
+                            .padding(.vertical, 10)
+
+                        boringCalendarPane
+                            .frame(maxWidth: .infinity)
+                            .padding(EdgeInsets(top: 4, leading: 10, bottom: 12, trailing: 14))
+                    }
+                }
+                .animation(AnimationCurves.duoModeSplit, value: DataStore.shared.double(for: .duoModeSplit, default: 58))
+                .transition(.opacity)
+            } else {
                 boringMediaPane
-                    .frame(maxWidth: .infinity)
-                    .padding(EdgeInsets(top: 4, leading: 12, bottom: 12, trailing: 8))
-
-                Rectangle()
-                    .fill(Color.white.opacity(0.08))
-                    .frame(width: 0.5)
-                    .padding(.vertical, 10)
-
-                boringCalendarPane
-                    .frame(maxWidth: .infinity)
-                    .padding(EdgeInsets(top: 4, leading: 10, bottom: 12, trailing: 14))
+                    .padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .transition(.opacity)
             }
-            .transition(.opacity)
         case .calendar:
             boringCalendarPane
                 .padding(12)
@@ -332,8 +405,8 @@ struct NotchView: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 10)
                 .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
+                    insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
+                    removal: .opacity
                 ))
                 .animation(AnimationCurves.hudSlide, value: viewModel.activeTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -529,6 +602,12 @@ struct NotchView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white.opacity(0.55))
                         .lineLimit(1)
+
+                    if DataStore.shared.bool(for: .showVisualizer, default: true), viewModel.isPlaying {
+                        liveVisualizerBars
+                            .scaleEffect(0.85, anchor: .leading)
+                            .padding(.top, 2)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -578,6 +657,7 @@ struct NotchView: View {
         .gesture(
             DragGesture(minimumDistance: 24)
                 .onEnded { val in
+                    guard DataStore.shared.bool(for: .mediaHorizontalGestures, default: true) else { return }
                     if val.translation.width < -50 { viewModel.handleSwipeLeft() }
                     else if val.translation.width > 50 { viewModel.handleSwipeRight() }
                 }
@@ -585,7 +665,18 @@ struct NotchView: View {
     }
 
     private var boringAlbumArt: some View {
-        ZStack(alignment: .bottomTrailing) {
+        let blurBehind = DataStore.shared.bool(for: .blurBehindAlbum, default: true)
+        return ZStack(alignment: .bottomTrailing) {
+            if blurBehind, let art = viewModel.albumArt {
+                Image(nsImage: art)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 58, height: 58)
+                    .blur(radius: 18)
+                    .opacity(0.45)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
             Group {
                 if let art = viewModel.albumArt {
                     Image(nsImage: art)
@@ -1781,5 +1872,35 @@ struct NotchView: View {
         if viewModel.batteryCharging { return .green }
         if pct > 0.2 { return .white.opacity(0.6) }
         return .orange
+    }
+}
+
+// MARK: - Live visualizer (extracted for type-checker)
+
+private struct LiveVisualizerBarsView: View {
+    let isPlaying: Bool
+    let tint: Color
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.08, paused: !isPlaying)) { context in
+            bars(at: context.date.timeIntervalSinceReferenceDate)
+        }
+    }
+
+    private func bars(at time: TimeInterval) -> some View {
+        HStack(alignment: .center, spacing: 2.5) {
+            ForEach(0..<5, id: \.self) { i in
+                Capsule()
+                    .fill(tint.opacity(0.85))
+                    .frame(width: 2.5, height: barHeight(index: i, time: time))
+            }
+        }
+        .frame(height: 16)
+    }
+
+    private func barHeight(index: Int, time: TimeInterval) -> CGFloat {
+        guard isPlaying else { return 3.5 }
+        let phase = sin(time * (5.5 + Double(index) * 0.35) + Double(index) * 1.15)
+        return CGFloat(4 + abs(phase) * 11)
     }
 }
