@@ -52,11 +52,15 @@ struct NotchDetector {
         )
     }
 
-    static func collapsedRect(screen: NSScreen? = nil, hasMedia: Bool = false) -> CGRect {
+    static func collapsedRect(screen: NSScreen? = nil, isPlaying: Bool = false) -> CGRect {
         let notch = notchRect(screen: screen)
         guard notch != .zero else { return .zero }
-        // Widen collapsed pill when music is live (art + visualizer wings) — BN MusicLiveActivity
-        let musicBoost: CGFloat = hasMedia ? 56 : 0
+        // Boring Notch MusicLiveActivity:
+        // chinWidth += 2 * max(0, closedNotchHeight - 12) + 20
+        // Only widen while a song is actively playing.
+        let musicBoost: CGFloat = isPlaying
+            ? (2 * max(0, notch.height - 12) + 20)
+            : 0
         let width = notch.width + musicBoost
         return CGRect(
             x: notch.midX - width / 2,

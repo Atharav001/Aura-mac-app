@@ -202,7 +202,7 @@ final class NotchViewModel {
         expandedRect = NotchDetector.expandedRect(screen: screen)
         collapsedRect = NotchDetector.collapsedRect(
             screen: screen,
-            hasMedia: hasMedia || !lastTrackTitle.isEmpty
+            isPlaying: isPlaying
         )
     }
 
@@ -407,6 +407,7 @@ final class NotchViewModel {
 
     func hideMedia() {
         hasMedia = false
+        isPlaying = false
         // Keep last track / art for "last played" — don't wipe albumArt
         state = isHovering ? .expanded : .collapsed
     }

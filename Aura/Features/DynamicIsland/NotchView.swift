@@ -175,17 +175,18 @@ struct NotchView: View {
     }
 
     private var topCornerRadius: CGFloat {
-        if appSettings.notchStyle == "pill" { return isExpanded ? 14 : 12 }
-        let scaling = DataStore.shared.bool(for: .cornerRadiusScaling, default: true)
-        if isExpanded && scaling { return 6 }
-        return isExpanded ? 6 : 6
+        if appSettings.notchStyle == "pill" { return isExpanded ? 14 : max(notchHeight / 2 - 1, 10) }
+        return 6
     }
 
     private var bottomCornerRadius: CGFloat {
-        if appSettings.notchStyle == "pill" { return isExpanded ? 14 : 12 }
+        if appSettings.notchStyle == "pill" { return isExpanded ? 14 : max(notchHeight / 2 - 1, 10) }
         let scaling = DataStore.shared.bool(for: .cornerRadiusScaling, default: true)
-        if isExpanded && scaling { return 22 }
-        return isExpanded ? 18 : 12
+        if isExpanded {
+            return scaling ? 22 : 18
+        }
+        // Closed / playing bulge — match hardware notch softness
+        return max(10, min(14, notchHeight - 16))
     }
 
     private var currentNotchShape: AuraNotchShape {
@@ -193,13 +194,16 @@ struct NotchView: View {
     }
 
     private var borderColor: Color {
+        // Collapsed notch should disappear into the camera housing — no border
+        if !isExpanded { return .clear }
         let saved = DataStore.shared.string(for: .borderColor) ?? ""
         if saved.isEmpty { return .white.opacity(0.08) }
         return Color(hex: saved) ?? .white.opacity(0.08)
     }
 
     private var borderWidth: CGFloat {
-        DataStore.shared.double(for: .borderWidth, default: 0.5)
+        if !isExpanded { return 0 }
+        return DataStore.shared.double(for: .borderWidth, default: 0.5)
     }
 
     private var innerContent: some View {
@@ -214,7 +218,6 @@ struct NotchView: View {
 
                     boringNotchBody
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        // BN: scale from top + opacity when revealing content
                         .transition(
                             .asymmetric(
                                 insertion: .scale(scale: 0.86, anchor: .top).combined(with: .opacity),
@@ -223,74 +226,85 @@ struct NotchView: View {
                         )
                 }
                 .transition(.opacity)
-            } else if viewModel.hasMedia || !viewModel.lastTrackTitle.isEmpty {
+            } else if viewModel.isPlaying {
+                // Spotify / Music bulge — only while a song is actively playing
                 collapsedLiveActivity
-                    .transition(.opacity)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .center)),
+                            removal: .opacity
+                        )
+                    )
             }
         }
         .animation(animationCurve, value: viewModel.state)
         .animation(AnimationCurves.contentReveal, value: viewModel.activeTab)
-        .animation(animationCurve, value: viewModel.hasMedia)
+        .animation(AnimationCurves.notchExpand, value: viewModel.isPlaying)
     }
 
     // MARK: - Collapsed live activity (art left · chin · visualizer right)
 
     private var collapsedLiveActivity: some View {
-        HStack(spacing: 0) {
+        let wingInset = max(6, (notchHeight - artSize) / 2)
+        return HStack(spacing: 0) {
             collapsedAlbumThumb
-                .padding(.leading, 10)
+                .padding(.leading, wingInset + 2)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 0)
 
-            // Physical camera chin — leave empty so art/visualizer sit in the wings
+            // Exact physical camera width so wings sit flush beside the hardware notch
             Color.clear
-                .frame(width: max(viewModel.notchRect.width - 36, 80))
+                .frame(width: max(viewModel.notchRect.width - 8, 120))
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 0)
 
             if DataStore.shared.bool(for: .showVisualizer, default: true) {
                 liveVisualizerBars
-                    .padding(.trailing, 12)
-            } else {
-                Image(systemName: viewModel.isPlaying ? "waveform" : "music.note")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .padding(.trailing, 12)
+                    .padding(.trailing, wingInset + 4)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.bottom, 1)
+    }
+
+    private var artSize: CGFloat {
+        // Fit inside the closed notch height with a couple px padding (BN: height - 12)
+        max(12, min(notchHeight - 12, notchHeight * 0.62))
     }
 
     private var collapsedAlbumThumb: some View {
-        let size = max(14, min(20, notchHeight - 10))
-        return Group {
-            if let art = viewModel.albumArt ?? viewModel.lastTrackIcon {
+        Group {
+            if let art = viewModel.albumArt {
                 Image(nsImage: art)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-            } else if let icon = viewModel.sourceAppIcon {
+            } else if let icon = viewModel.sourceAppIcon ?? viewModel.lastTrackIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.white.opacity(0.12))
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(Color.white.opacity(0.15))
             }
         }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+        .frame(width: artSize, height: artSize)
+        .clipShape(RoundedRectangle(cornerRadius: max(3, artSize * 0.22), style: .continuous))
     }
 
     private var liveVisualizerBars: some View {
         let colored = DataStore.shared.bool(for: .coloredSpectrograms, default: true)
-        let playing = viewModel.isPlaying
         let tintColor: Color = {
             if colored, let c = viewModel.dominantColors.first {
                 return Color(nsColor: c)
             }
-            return colored ? Color.pink : Color.white
+            // Match notch chrome — soft white bars, not pink, when coloring is off
+            return .white.opacity(0.9)
         }()
-        return LiveVisualizerBarsView(isPlaying: playing, tint: tintColor)
+        return LiveVisualizerBarsView(
+            isPlaying: true,
+            tint: tintColor,
+            maxHeight: max(10, artSize - 2)
+        )
     }
 
     // MARK: - Module switcher (Media / Calendar / Clipboard / Shelf / Focus)
@@ -343,22 +357,27 @@ struct NotchView: View {
 
     @ViewBuilder
     private var materialOverlay: some View {
-        let variant = DataStore.shared.string(for: .glassVariant) ?? "ios"
-        Color.black.opacity(0.94)
-        if variant == "clear" {
-            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 0)
-                .opacity(0.4)
-        } else if variant == "ios" {
-            VisualEffectView(material: .hudWindow, blendingMode: .withinWindow, cornerRadius: 0)
-                .opacity(0.5)
-            if DataStore.shared.bool(for: .playerTinting, default: true),
-               let color = viewModel.dominantColors.first {
-                Color(nsColor: color).opacity(0.1)
-                    .blendMode(.plusLighter)
-            }
+        // Collapsed (idle or playing bulge) must be pure black to blend with the hardware notch
+        if !isExpanded {
+            Color.black
         } else {
-            VisualEffectView(material: .sidebar, blendingMode: .withinWindow, cornerRadius: 0)
-                .opacity(0.4)
+            let variant = DataStore.shared.string(for: .glassVariant) ?? "ios"
+            Color.black.opacity(0.96)
+            if variant == "clear" {
+                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 0)
+                    .opacity(0.4)
+            } else if variant == "ios" {
+                VisualEffectView(material: .hudWindow, blendingMode: .withinWindow, cornerRadius: 0)
+                    .opacity(0.45)
+                if DataStore.shared.bool(for: .playerTinting, default: true),
+                   let color = viewModel.dominantColors.first {
+                    Color(nsColor: color).opacity(0.1)
+                        .blendMode(.plusLighter)
+                }
+            } else {
+                VisualEffectView(material: .sidebar, blendingMode: .withinWindow, cornerRadius: 0)
+                    .opacity(0.4)
+            }
         }
     }
 
@@ -1880,6 +1899,7 @@ struct NotchView: View {
 private struct LiveVisualizerBarsView: View {
     let isPlaying: Bool
     let tint: Color
+    var maxHeight: CGFloat = 16
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 0.08, paused: !isPlaying)) { context in
@@ -1888,19 +1908,20 @@ private struct LiveVisualizerBarsView: View {
     }
 
     private func bars(at time: TimeInterval) -> some View {
-        HStack(alignment: .center, spacing: 2.5) {
+        HStack(alignment: .center, spacing: 2) {
             ForEach(0..<5, id: \.self) { i in
                 Capsule()
-                    .fill(tint.opacity(0.85))
+                    .fill(tint)
                     .frame(width: 2.5, height: barHeight(index: i, time: time))
             }
         }
-        .frame(height: 16)
+        .frame(height: maxHeight)
     }
 
     private func barHeight(index: Int, time: TimeInterval) -> CGFloat {
-        guard isPlaying else { return 3.5 }
+        let minH = max(3, maxHeight * 0.28)
+        guard isPlaying else { return minH }
         let phase = sin(time * (5.5 + Double(index) * 0.35) + Double(index) * 1.15)
-        return CGFloat(4 + abs(phase) * 11)
+        return minH + abs(phase) * (maxHeight - minH)
     }
 }

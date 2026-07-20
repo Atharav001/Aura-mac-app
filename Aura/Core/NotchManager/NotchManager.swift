@@ -75,7 +75,7 @@ final class NotchManager {
                 } else {
                     self.viewModel.hideMedia()
                 }
-                // Widen / shrink collapsed chin for live activity wings
+                // Widen / shrink collapsed chin only when play state changes
                 if self.viewModel.state == .collapsed {
                     self.viewModel.updateFrames()
                     self.animatePanelFrame(self.viewModel.currentFrame, springy: true)
