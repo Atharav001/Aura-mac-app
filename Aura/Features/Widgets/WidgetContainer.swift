@@ -1,9 +1,11 @@
 import SwiftUI
+import AppKit
 
 struct WidgetContainer<Content: View>: View {
     @State private var viewModel = WidgetState()
     @State private var panelWindow: NSWindow?
     @State private var showControls = false
+    @State private var liveZoom: CGFloat = 1.0
 
     let content: Content
 
@@ -14,7 +16,9 @@ struct WidgetContainer<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             content
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 28)
+                .padding(.bottom, 16)
 
             if showControls {
                 Divider()
@@ -30,10 +34,22 @@ struct WidgetContainer<Content: View>: View {
         .background(WindowAccessor { window in
             panelWindow = window
             window?.alphaValue = viewModel.opacity
-            window?.level = viewModel.isPinned ? NSWindow.Level.statusBar : .floating
+            if let panel = window as? FloatingPanel {
+                panel.setAlwaysOnTop(true)
+                panel.onZoomChanged = { scale in
+                    Task { @MainActor in liveZoom = scale }
+                }
+                if viewModel.isPinned {
+                    panel.setAlwaysOnTop(true)
+                    panel.level = .statusBar
+                }
+            }
         })
-        .glassmorphic(opacity: viewModel.blurIntensity, material: viewModel.blurIntensity > 0.5 ? .hudWindow : .sidebar)
-        .scaleEffect(panelZoomScale)
+        .glassmorphic(
+            opacity: max(0.12, viewModel.blurIntensity * 0.55),
+            material: viewModel.blurIntensity > 0.45 ? .hudWindow : .sidebar,
+            cornerRadius: 18
+        )
         .overlay(alignment: .topLeading) {
             closeButton
         }
@@ -41,12 +57,15 @@ struct WidgetContainer<Content: View>: View {
             gearButton
         }
         .onChange(of: viewModel.isPinned) { _, isPinned in
-            panelWindow?.level = isPinned ? .statusBar : .floating
+            if let panel = panelWindow as? FloatingPanel {
+                panel.level = isPinned ? .statusBar : .floating
+                panel.setAlwaysOnTop(true)
+            }
         }
         .onChange(of: viewModel.opacity) { _, newOpacity in
             panelWindow?.alphaValue = newOpacity
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showControls)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: showControls)
     }
 
     private var closeButton: some View {
@@ -56,52 +75,58 @@ struct WidgetContainer<Content: View>: View {
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(Color.secondary.opacity(0.6))
-                .frame(width: 18, height: 18)
-                .background(
-                    Circle()
-                        .fill(.primary.opacity(0.08))
-                )
+                .foregroundStyle(Color.secondary.opacity(0.7))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.primary.opacity(0.08)))
         }
         .buttonStyle(.plain)
-        .help("Close widget")
-        .padding(8)
+        .help("Close")
+        .padding(10)
     }
 
     private var gearButton: some View {
         Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                 showControls.toggle()
             }
         } label: {
             Image(systemName: "gearshape")
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(showControls ? Color.secondary.opacity(0.8) : Color.secondary.opacity(0.5))
+                .foregroundStyle(showControls ? Color.secondary.opacity(0.9) : Color.secondary.opacity(0.55))
                 .frame(width: 22, height: 22)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(showControls ? Color.primary.opacity(0.10) : Color.primary.opacity(0.04))
+                        .fill(showControls ? Color.primary.opacity(0.12) : Color.primary.opacity(0.05))
                 )
         }
         .buttonStyle(.plain)
-        .help("Widget settings")
-        .padding(8)
+        .help("Opacity & blur")
+        .padding(10)
     }
 
     private var controls: some View {
-        VStack(spacing: 6) {
-            controlRow(
-                icon: "eye",
-                label: "Opacity",
-                value: $viewModel.opacity,
-                range: 0.3...1.0
-            )
-            controlRow(
-                icon: "circle.dotted",
-                label: "Blur",
-                value: $viewModel.blurIntensity,
-                range: 0.0...1.0
-            )
+        VStack(spacing: 8) {
+            controlRow(icon: "eye", label: "Opacity", value: $viewModel.opacity, range: 0.25...1.0)
+            controlRow(icon: "circle.dotted", label: "Blur", value: $viewModel.blurIntensity, range: 0.0...1.0)
+
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14)
+                Text("Zoom")
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, alignment: .leading)
+                Text(String(format: "%.0f%%", liveZoom * 100))
+                    .font(.system(size: 9, weight: .regular, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Text("Scroll to zoom · Drag edges to resize")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.quaternary)
+            }
+
             pinButton
         }
     }
@@ -114,10 +139,10 @@ struct WidgetContainer<Content: View>: View {
                 HStack(spacing: 6) {
                     Image(systemName: viewModel.isPinned ? "pin.fill" : "pin")
                         .font(.system(size: 9, weight: .semibold))
-                    Text(viewModel.isPinned ? "Pinned" : "Pin Widget")
+                    Text(viewModel.isPinned ? "Pinned on top" : "Pin above windows")
                         .font(.system(size: 10, weight: .regular))
                 }
-                .foregroundStyle(viewModel.isPinned ? .blue.opacity(0.7) : Color.secondary.opacity(0.6))
+                .foregroundStyle(viewModel.isPinned ? .blue.opacity(0.8) : Color.secondary.opacity(0.65))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(
@@ -126,7 +151,6 @@ struct WidgetContainer<Content: View>: View {
                 )
             }
             .buttonStyle(.plain)
-            .help(viewModel.isPinned ? "Unpin widget" : "Pin widget above all windows")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -152,11 +176,6 @@ struct WidgetContainer<Content: View>: View {
                 .foregroundStyle(.tertiary)
                 .frame(width: 36, alignment: .trailing)
         }
-    }
-
-    private var panelZoomScale: CGFloat {
-        guard let window = panelWindow as? FloatingPanel else { return 1.0 }
-        return window.zoomScale
     }
 }
 

@@ -13,7 +13,7 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popover = NSPopover()
         popover.behavior = .applicationDefined
-        popover.contentSize = NSSize(width: 360, height: 540)
+        popover.contentSize = NSSize(width: 320, height: 420)
 
         super.init()
 

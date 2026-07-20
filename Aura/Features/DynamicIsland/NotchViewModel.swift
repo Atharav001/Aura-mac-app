@@ -3,11 +3,44 @@ import AppKit
 import IOKit.ps
 import MediaPlayer
 
-struct ClipboardItem: Identifiable {
-    let id = UUID()
+struct ClipboardItem: Identifiable, Equatable {
+    let id: UUID
     let text: String
+    let imageData: Data?
     let sourceApp: String
     let timestamp: Date
+    var isPinned: Bool
+
+    var hasImage: Bool { imageData != nil }
+
+    init(id: UUID = UUID(), text: String, imageData: Data? = nil, sourceApp: String, timestamp: Date = Date(), isPinned: Bool = false) {
+        self.id = id
+        self.text = text
+        self.imageData = imageData
+        self.sourceApp = sourceApp
+        self.timestamp = timestamp
+        self.isPinned = isPinned
+    }
+
+    init(from persisted: PersistedClipboardItem) {
+        self.id = persisted.id
+        self.text = persisted.text
+        self.imageData = persisted.imageData
+        self.sourceApp = persisted.sourceApp
+        self.timestamp = persisted.timestamp
+        self.isPinned = persisted.isPinned
+    }
+
+    func toPersisted() -> PersistedClipboardItem {
+        PersistedClipboardItem(
+            id: id,
+            text: text,
+            imageData: imageData,
+            sourceApp: sourceApp,
+            timestamp: timestamp,
+            isPinned: isPinned
+        )
+    }
 }
 
 @Observable
@@ -28,18 +61,6 @@ final class NotchViewModel {
             case .system(let id): return id
             }
         }
-
-        var iconName: String {
-            switch self {
-            case .local: return "music.note.list"
-            case .system(let id):
-                switch id {
-                case "com.spotify.client": return "spotify"
-                case "com.apple.Music": return "apple.music"
-                default: return "antenna.radiowaves.left.and.right"
-                }
-            }
-        }
     }
 
     enum NotchTab: String, CaseIterable {
@@ -50,23 +71,21 @@ final class NotchViewModel {
         case pomodoro = "Focus"
     }
 
-    // State
     var state: NotchState = .collapsed
     var isHovering: Bool = false
     var notchRect: CGRect = .zero
     var expandedRect: CGRect = .zero
     var collapsedRect: CGRect = .zero
 
-    // Tab system
     var activeTab: NotchTab = .media
     var availableTabs: [NotchTab] = [.media, .calendar, .clipboard, .shelf, .pomodoro]
 
-    // Now Playing
     var nowPlayingTitle: String = ""
     var nowPlayingArtist: String = ""
     var isPlaying: Bool = false
     var progress: Double = 0
     var duration: TimeInterval = 0
+    var elapsedTime: TimeInterval = 0
     var mediaSource: MediaSource = .local
     var hasMedia: Bool = false
     var sourceAppName: String = ""
@@ -74,35 +93,27 @@ final class NotchViewModel {
     var albumArt: NSImage?
     var dominantColors: [NSColor] = []
 
-    // Quality badges (Alcove-style: Lossless, Dolby Atmos, E)
     var audioQualityBadge: String? = nil
     var hasDolbyAtmos: Bool = false
     var hasLossless: Bool = false
 
-    // Last track cache
     var lastTrackTitle: String = ""
     var lastTrackArtist: String = ""
     var lastTrackIcon: NSImage?
     var lastTrackSource: MediaSource = .local
     var lastTrackAppName: String = ""
 
-    // Shelf
     var shelfItems: [URL] = []
 
-    // Clipboard
     var clipboardHistory: [ClipboardItem] = []
-    var clipboardPinned: Set<UUID> = []
 
-    // Camera Mirror
     var cameraActive: Bool = false
 
-    // System
     var currentDate: String = ""
     var currentTime: String = ""
     var batteryLevel: Double = 0
     var batteryCharging: Bool = false
 
-    // System HUD replacement (Alcove-style)
     var systemHUDVolume: Float = 0.5
     var systemHUDBrightness: Float = 0.7
     var systemHUDType: SystemHUDType? = nil
@@ -118,27 +129,22 @@ final class NotchViewModel {
         case brightness
     }
 
-    // Duo Mode
     var duoModeEnabled: Bool {
         DataStore.shared.bool(for: .duoModeEnabled, default: false)
     }
     var duoLeftContent: NotchTab = .media
     var duoRightContent: NotchTab = .calendar
 
-    // Weather (Boring Notch-inspired)
-    var weatherEnabled: Bool = false
-    var weatherTemperature: String = "--"
-    var weatherCondition: String = ""
-    var weatherIcon: String = "cloud"
-
-    // Drag-to-expand state
     var isDraggingToNotch: Bool = false
     var dragProgress: Double = 0
 
-    // Callbacks
     var onTogglePlayPause: (() -> Void)?
     var onNextTrack: (() -> Void)?
     var onPreviousTrack: (() -> Void)?
+
+    private var albumArtRetryCount = 0
+    private var albumArtTimer: DispatchSourceTimer?
+    private var lastPasteboardChangeCount: Int = -1
 
     init() {
         if let saved = DataStore.shared.lastTrack {
@@ -159,6 +165,15 @@ final class NotchViewModel {
            let tab = NotchTab(rawValue: savedTab) {
             activeTab = tab
         }
+
+        // Restore clipboard (pinned forever + last 7 days)
+        DataStore.shared.pruneClipboardHistory()
+        clipboardHistory = DataStore.shared.clipboardItems.map { ClipboardItem(from: $0) }
+
+        // Restore shelf paths that still exist
+        shelfItems = DataStore.shared.shelfPaths
+            .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     var currentFrame: CGRect {
@@ -166,6 +181,20 @@ final class NotchViewModel {
         case .collapsed: return collapsedRect
         case .expanded, .media: return expandedRect
         }
+    }
+
+    var formattedElapsed: String {
+        formatTime(elapsedTime)
+    }
+
+    var formattedDuration: String {
+        formatTime(duration)
+    }
+
+    private func formatTime(_ t: TimeInterval) -> String {
+        let m = Int(t) / 60
+        let s = Int(t) % 60
+        return String(format: "%d:%02d", m, s)
     }
 
     func updateFrames(screen: NSScreen? = nil) {
@@ -203,15 +232,13 @@ final class NotchViewModel {
         }
     }
 
-    private var albumArtRetryCount = 0
-    private var albumArtTimer: DispatchSourceTimer?
-
     func showMedia(title: String, artist: String, isPlaying: Bool, progress: Double, duration: TimeInterval, source: MediaSource = .local, appName: String = "", appIcon: NSImage? = nil) {
         nowPlayingTitle = title
         nowPlayingArtist = artist
         self.isPlaying = isPlaying
         self.progress = progress
         self.duration = duration
+        self.elapsedTime = duration > 0 ? progress * duration : 0
         mediaSource = source
         sourceAppName = appName
         sourceAppIcon = appIcon
@@ -249,9 +276,6 @@ final class NotchViewModel {
                 if q == 1 { hasLossless = true; audioQualityBadge = "Lossless" }
                 else if q == 2 { hasDolbyAtmos = true; audioQualityBadge = "Dolby Atmos" }
             }
-            if let _ = nowPlaying["MPNowPlayingInfoPropertyIsLiveBroadcast"] as? Bool {
-                audioQualityBadge = "Live"
-            }
         }
 
         if hasLossless && hasDolbyAtmos {
@@ -266,7 +290,15 @@ final class NotchViewModel {
             return
         }
         let size = CGSize(width: 8, height: 8)
-        guard let context = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        guard let context = CGContext(
+            data: nil,
+            width: Int(size.width),
+            height: Int(size.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return }
         context.draw(cgImage, in: CGRect(origin: .zero, size: size))
         guard let pixelData = context.data else { return }
         let data = pixelData.assumingMemoryBound(to: UInt8.self)
@@ -284,7 +316,12 @@ final class NotchViewModel {
         dominantColors = sorted.compactMap { (key, _) -> NSColor? in
             let parts = key.split(separator: ",").compactMap { Int($0) }
             guard parts.count == 3 else { return nil }
-            return NSColor(red: CGFloat(parts[0] * 16) / 255, green: CGFloat(parts[1] * 16) / 255, blue: CGFloat(parts[2] * 16) / 255, alpha: 1)
+            return NSColor(
+                red: CGFloat(parts[0] * 16) / 255,
+                green: CGFloat(parts[1] * 16) / 255,
+                blue: CGFloat(parts[2] * 16) / 255,
+                alpha: 1
+            )
         }
     }
 
@@ -334,48 +371,109 @@ final class NotchViewModel {
         state = isHovering ? .expanded : .collapsed
     }
 
-    func togglePlayPause() {
-        onTogglePlayPause?()
-    }
-
-    func nextTrack() {
-        onNextTrack?()
-    }
-
-    func previousTrack() {
-        onPreviousTrack?()
-    }
+    func togglePlayPause() { onTogglePlayPause?() }
+    func nextTrack() { onNextTrack?() }
+    func previousTrack() { onPreviousTrack?() }
 
     // MARK: - Shelf
 
     func addShelfItem(_ url: URL) {
+        guard DataStore.shared.bool(for: .shelfEnabled, default: true) else { return }
+        guard !shelfItems.contains(url) else { return }
         shelfItems.append(url)
+        persistShelf()
     }
 
     func removeShelfItem(_ url: URL) {
         shelfItems.removeAll { $0 == url }
+        persistShelf()
     }
 
     func clearShelf() {
         shelfItems.removeAll()
+        persistShelf()
+    }
+
+    func dragOutShelfItem(_ url: URL) {
+        if DataStore.shared.bool(for: .shelfAutoRemove, default: false) {
+            removeShelfItem(url)
+        }
+    }
+
+    private func persistShelf() {
+        DataStore.shared.saveShelf(shelfItems)
     }
 
     // MARK: - Clipboard
 
-    func addClipboardItem(_ text: String, sourceApp: String) {
-        clipboardHistory.insert(ClipboardItem(text: text, sourceApp: sourceApp, timestamp: Date()), at: 0)
-        let maxHistory = Int(DataStore.shared.double(for: .clipboardHistorySize, default: 48))
-        if clipboardHistory.count > maxHistory {
-            clipboardHistory = Array(clipboardHistory.prefix(maxHistory))
+    func pollClipboard() {
+        guard DataStore.shared.bool(for: .clipboardEnabled, default: true) else { return }
+        let pb = NSPasteboard.general
+        let changeCount = pb.changeCount
+        guard changeCount != lastPasteboardChangeCount else { return }
+        lastPasteboardChangeCount = changeCount
+
+        let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "System"
+
+        if let image = NSImage(pasteboard: pb),
+           let tiff = image.tiffRepresentation {
+            // Avoid duplicating same image blob
+            if clipboardHistory.first?.imageData != tiff {
+                addClipboardItem(text: "Image", imageData: tiff, sourceApp: sourceApp)
+            }
+            return
+        }
+
+        if let text = pb.string(forType: .string), !text.isEmpty {
+            if clipboardHistory.first?.text != text || clipboardHistory.first?.hasImage == true {
+                addClipboardItem(text: text, imageData: nil, sourceApp: sourceApp)
+            }
         }
     }
 
+    func addClipboardItem(text: String, imageData: Data? = nil, sourceApp: String) {
+        let item = ClipboardItem(text: text, imageData: imageData, sourceApp: sourceApp)
+        clipboardHistory.insert(item, at: 0)
+        enforceClipboardLimits()
+        persistClipboard()
+    }
+
     func toggleClipboardPinned(_ id: UUID) {
-        if clipboardPinned.contains(id) {
-            clipboardPinned.remove(id)
-        } else {
-            clipboardPinned.insert(id)
+        guard let index = clipboardHistory.firstIndex(where: { $0.id == id }) else { return }
+        clipboardHistory[index].isPinned.toggle()
+        // Move pinned to top
+        clipboardHistory.sort { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+            return lhs.timestamp > rhs.timestamp
         }
+        persistClipboard()
+    }
+
+    func deleteClipboardItem(_ id: UUID) {
+        clipboardHistory.removeAll { $0.id == id }
+        persistClipboard()
+    }
+
+    private func enforceClipboardLimits() {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date.distantPast
+        let maxHistory = Int(DataStore.shared.double(for: .clipboardHistorySize, default: 48))
+        // Keep all pinned + unpinned within 7 days / max size
+        clipboardHistory = clipboardHistory.filter { $0.isPinned || $0.timestamp >= cutoff }
+        let pinned = clipboardHistory.filter(\.isPinned)
+        var unpinned = clipboardHistory.filter { !$0.isPinned }
+        let unpinnedBudget = max(0, maxHistory - pinned.count)
+        if unpinned.count > unpinnedBudget {
+            unpinned = Array(unpinned.prefix(unpinnedBudget))
+        }
+        clipboardHistory = pinned + unpinned
+        clipboardHistory.sort { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned { return lhs.isPinned && !rhs.isPinned }
+            return lhs.timestamp > rhs.timestamp
+        }
+    }
+
+    private func persistClipboard() {
+        DataStore.shared.saveClipboard(clipboardHistory.map { $0.toPersisted() })
     }
 
     // MARK: - Swipe Gesture Handling

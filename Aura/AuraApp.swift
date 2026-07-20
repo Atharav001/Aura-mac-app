@@ -59,9 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     @objc func handleStartPomodoro() {
         FocusManager.shared.startFocus()
-        PanelManager.shared.spawnPanel(size: NSSize(width: 260, height: 360)) {
+        let focusMins = DataStore.shared.double(for: .pomodoroFocusDuration, default: 25)
+        PanelManager.shared.spawnPanel(size: NSSize(width: 280, height: 400)) {
             WidgetContainer {
-                PomodoroWidget(initialDuration: 25 * 60)
+                PomodoroWidget(initialDuration: focusMins * 60)
             }
         }
     }
@@ -69,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     @objc func handleStartDeepWork() {
         FocusManager.shared.startFocus()
-        PanelManager.shared.spawnPanel(size: NSSize(width: 260, height: 360)) {
+        PanelManager.shared.spawnPanel(size: NSSize(width: 280, height: 400)) {
             WidgetContainer {
                 PomodoroWidget(initialDuration: 50 * 60)
             }
@@ -77,10 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func handlePomodoroComplete() {
+        // Soft celebration only — do not tear down focus during auto-loop
         FocusManager.shared.viewModel.triggerCompletionWave()
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
-            FocusManager.shared.stopFocus()
-        }
     }
 }

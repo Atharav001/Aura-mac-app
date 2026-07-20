@@ -32,20 +32,20 @@ final class NotchManager {
         panel = NotchPanel(contentView: hostingView, rect: viewModel.collapsedRect)
         panel?.orderFront(nil)
 
-        viewModel.onTogglePlayPause = { [weak self] in
-            LocalAudioManager.shared.togglePlayPause()
-            self?.refreshMediaInfo()
+        viewModel.onTogglePlayPause = {
+            MediaTracker.shared.togglePlayPause()
         }
         viewModel.onNextTrack = {
-            NotificationCenter.default.post(name: .remoteNextTrack, object: nil)
+            MediaTracker.shared.nextTrack()
         }
         viewModel.onPreviousTrack = {
-            NotificationCenter.default.post(name: .remotePreviousTrack, object: nil)
+            MediaTracker.shared.previousTrack()
         }
 
         startMousePolling()
         setupMiddleClickHandler()
         setupSystemHUDMonitoring()
+        setupDragToShelfDetection()
         MediaTracker.shared.startTracking()
         MediaTracker.shared.onUpdate = { [weak self] info in
             guard let self else { return }
@@ -226,6 +226,45 @@ final class NotchManager {
         }
     }
 
+    // MARK: - Drag-to-Shelf (Boring Notch style)
+
+    private func setupDragToShelfDetection() {
+        NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) { [weak self] _ in
+            guard let self else { return }
+            guard DataStore.shared.bool(for: .shelfEnabled, default: true) else { return }
+            // Detect Finder drag sessions near the notch
+            let mouse = NSEvent.mouseLocation
+            let notch = viewModel.notchRect.insetBy(dx: -40, dy: -30)
+            guard notch.contains(mouse) else {
+                if viewModel.isDraggingToNotch {
+                    Task { @MainActor in
+                        self.viewModel.isDraggingToNotch = false
+                    }
+                }
+                return
+            }
+            // If pasteboard has file URLs while dragging near notch, open shelf
+            let pb = NSPasteboard(name: .drag)
+            let hasFiles = pb.readObjects(forClasses: [NSURL.self], options: [
+                .urlReadingFileURLsOnly: true
+            ]) != nil
+            guard hasFiles else { return }
+            Task { @MainActor in
+                self.viewModel.isDraggingToNotch = true
+                self.viewModel.activeTab = .shelf
+                if self.viewModel.state == .collapsed {
+                    self.openNotch()
+                }
+            }
+        }
+
+        NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
+            Task { @MainActor in
+                self?.viewModel.isDraggingToNotch = false
+            }
+        }
+    }
+
     // MARK: - Mouse Polling
 
     private func startMousePolling() {
@@ -324,31 +363,31 @@ final class NotchManager {
     }
 
     private func animatePanelFrame(_ frame: CGRect, springy: Bool = true) {
-        if springy && !DataStore.shared.bool(for: .disableOvershoot, default: false) {
+        let disableOvershoot = DataStore.shared.bool(for: .disableOvershoot, default: false)
+        if springy && !disableOvershoot {
             let animation = CASpringAnimation(keyPath: "frameOrigin")
-            animation.damping = 12
-            animation.stiffness = 180
-            animation.mass = 1.2
-            animation.initialVelocity = 5
-            animation.duration = animation.settlingDuration * 0.8
+            animation.damping = 14
+            animation.stiffness = 220
+            animation.mass = 1.0
+            animation.initialVelocity = 8
+            animation.duration = min(animation.settlingDuration, 0.55)
             animation.fromValue = NSValue(point: panel?.frame.origin ?? .zero)
             animation.toValue = NSValue(point: frame.origin)
-            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel?.animations = ["frameOrigin": animation]
 
             let sizeAnimation = CASpringAnimation(keyPath: "frameSize")
-            sizeAnimation.damping = 12
-            sizeAnimation.stiffness = 180
-            sizeAnimation.mass = 1.2
-            sizeAnimation.initialVelocity = 5
-            sizeAnimation.duration = animation.settlingDuration * 0.8
+            sizeAnimation.damping = 14
+            sizeAnimation.stiffness = 220
+            sizeAnimation.mass = 1.0
+            sizeAnimation.initialVelocity = 8
+            sizeAnimation.duration = animation.duration
             sizeAnimation.fromValue = NSValue(size: panel?.frame.size ?? .zero)
             sizeAnimation.toValue = NSValue(size: frame.size)
             panel?.animations["frameSize"] = sizeAnimation
         }
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = springy ? 0.6 : 0.35
+            context.duration = springy ? (disableOvershoot ? 0.28 : 0.48) : 0.28
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             context.allowsImplicitAnimation = true
             panel?.animator().setFrame(frame, display: true)

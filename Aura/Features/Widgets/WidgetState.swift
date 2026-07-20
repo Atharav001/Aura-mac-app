@@ -10,7 +10,7 @@ final class WidgetState {
     init() {
         opacity = DataStore.shared.double(for: .defaultOpacity, default: 1.0)
         blurIntensity = DataStore.shared.double(for: .defaultBlur, default: 0.5)
-        isPinned = DataStore.shared.bool(for: .defaultPin, default: false)
+        isPinned = DataStore.shared.bool(for: .defaultPin, default: true)
         isPresented = false
     }
 }

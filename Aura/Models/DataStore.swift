@@ -1,29 +1,29 @@
 import Foundation
 
-// SwiftData Migration Guide
-// -------------------------
-// SwiftData @Model macro requires full Xcode (Command Line Tools cannot resolve
-// SwiftDataMacros plugin). To migrate when Xcode is available:
-//
-// 1. Add 'import SwiftData' and 'import SwiftUI' to the target
-// 2. Add '.modelContainer(for: [TodoItem.self, AppSettings.self])' to the WindowGroup
-//    or Scene in AuraApp.swift
-// 3. Replace 'struct TodoItem: Codable' with '@Model class TodoItem' and add
-//    '@Attribute(.unique) var id: UUID'
-// 4. Replace 'struct AppSettings: Codable' with '@Model class AppSettings'
-// 5. Replace DataStore.shared usage with @Environment(\.modelContext) or
-//    ModelContainer.shared.mainContext
-// 6. Use FetchDescriptor / Predicate macros for queries
-// 7. The JSON file at ~/Library/Application Support/aura_data.json can be migrated
-//    by reading it one last time via DataStore.load() and inserting into the model
-//    context via ModelContainer
-
 struct LastTrackInfo: Codable {
     var title: String
     var artist: String
     var sourceBundleID: String?
     var sourceAppName: String
     var appIconData: Data?
+}
+
+struct PersistedClipboardItem: Codable, Identifiable, Equatable {
+    var id: UUID
+    var text: String
+    var imageData: Data?
+    var sourceApp: String
+    var timestamp: Date
+    var isPinned: Bool
+
+    init(id: UUID = UUID(), text: String, imageData: Data? = nil, sourceApp: String, timestamp: Date = Date(), isPinned: Bool = false) {
+        self.id = id
+        self.text = text
+        self.imageData = imageData
+        self.sourceApp = sourceApp
+        self.timestamp = timestamp
+        self.isPinned = isPinned
+    }
 }
 
 final class DataStore: @unchecked Sendable {
@@ -40,6 +40,8 @@ final class DataStore: @unchecked Sendable {
     private var _todoItems: [TodoItem] = []
     private var _settings: [AppSettings] = []
     private var _lastTrack: LastTrackInfo?
+    private var _clipboardItems: [PersistedClipboardItem] = []
+    private var _shelfPaths: [String] = []
 
     var todoItems: [TodoItem] {
         get { lock.withLock { _todoItems } }
@@ -56,8 +58,19 @@ final class DataStore: @unchecked Sendable {
         set { lock.withLock { _lastTrack = newValue } }
     }
 
+    var clipboardItems: [PersistedClipboardItem] {
+        get { lock.withLock { _clipboardItems } }
+        set { lock.withLock { _clipboardItems = newValue } }
+    }
+
+    var shelfPaths: [String] {
+        get { lock.withLock { _shelfPaths } }
+        set { lock.withLock { _shelfPaths = newValue } }
+    }
+
     private init() {
         load()
+        pruneClipboardHistory()
     }
 
     func setLastTrack(title: String, artist: String, sourceBundleID: String?, sourceAppName: String, appIconData: Data?) {
@@ -72,9 +85,35 @@ final class DataStore: @unchecked Sendable {
         save()
     }
 
+    func saveClipboard(_ items: [PersistedClipboardItem]) {
+        clipboardItems = items
+        save()
+    }
+
+    func saveShelf(_ urls: [URL]) {
+        shelfPaths = urls.map(\.path)
+        save()
+    }
+
+    /// Keep pinned forever; drop unpinned older than 7 days.
+    func pruneClipboardHistory() {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date.distantPast
+        let pruned = clipboardItems.filter { $0.isPinned || $0.timestamp >= cutoff }
+        if pruned.count != clipboardItems.count {
+            clipboardItems = pruned
+            save()
+        }
+    }
+
     func save() {
         let data: StoredData = lock.withLock {
-            StoredData(todoItems: _todoItems, settings: _settings, lastTrack: _lastTrack)
+            StoredData(
+                todoItems: _todoItems,
+                settings: _settings,
+                lastTrack: _lastTrack,
+                clipboardItems: _clipboardItems,
+                shelfPaths: _shelfPaths
+            )
         }
         if let encoded = try? JSONEncoder().encode(data) {
             try? encoded.write(to: fileURL, options: .atomic)
@@ -90,6 +129,8 @@ final class DataStore: @unchecked Sendable {
             _todoItems = decoded.todoItems
             _settings = decoded.settings
             _lastTrack = decoded.lastTrack
+            _clipboardItems = decoded.clipboardItems ?? []
+            _shelfPaths = decoded.shelfPaths ?? []
         }
     }
 
@@ -97,5 +138,7 @@ final class DataStore: @unchecked Sendable {
         let todoItems: [TodoItem]
         let settings: [AppSettings]
         let lastTrack: LastTrackInfo?
+        var clipboardItems: [PersistedClipboardItem]?
+        var shelfPaths: [String]?
     }
 }

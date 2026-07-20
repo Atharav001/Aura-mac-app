@@ -22,6 +22,8 @@ final class PanelManager: @unchecked Sendable {
     ) -> UUID {
         let panel = FloatingPanel(rootView: content(), size: size)
         panel.panelID = id
+        panel.scrollZoomEnabled = true
+        panel.setAlwaysOnTop(true)
         panel.onClose = { [weak self] closedID in
             self?.closePanel(id: closedID)
         }
@@ -32,6 +34,7 @@ final class PanelManager: @unchecked Sendable {
             y: screenFrame.midY - size.height / 2
         )
         panel.setFrameOrigin(pos)
+        panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
 
         let observer = addDragSnapping(to: panel)
@@ -135,6 +138,8 @@ final class PanelManager: @unchecked Sendable {
     @MainActor
     private func snapWindowToEdge(window: NSWindow) {
         guard let screenFrame = NSScreen.main?.visibleFrame else { return }
+        // Don't snap while actively resizing
+        guard !window.inLiveResize else { return }
 
         let frame = window.frame
         let threshold: CGFloat = snapThreshold
@@ -160,7 +165,7 @@ final class PanelManager: @unchecked Sendable {
         guard targetOrigin != frame.origin else { return }
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.3
+            context.duration = 0.25
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             window.animator().setFrameOrigin(targetOrigin)
         }

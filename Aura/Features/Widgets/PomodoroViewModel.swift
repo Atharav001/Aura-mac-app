@@ -5,6 +5,7 @@ import AVFoundation
 import AppKit
 import UniformTypeIdentifiers
 
+@MainActor
 @Observable
 final class PomodoroViewModel {
     enum State: Equatable {
@@ -23,6 +24,9 @@ final class PomodoroViewModel {
     var timeRemaining: TimeInterval = 25 * 60
     var totalTime: TimeInterval = 25 * 60
     var isAlarmPlaying = false
+    /// When true, focus → break → focus loops automatically.
+    var autoContinue = true
+    var isEditingDuration = false
 
     private var alarmPlayer: AVAudioPlayer?
     var alarmURL: URL?
@@ -36,11 +40,30 @@ final class PomodoroViewModel {
 
     private var cancellable: AnyCancellable?
     private var startDate: Date?
+    private var shouldAutoStartNext = false
 
     var formattedTime: String {
         let minutes = Int(timeRemaining) / 60
         let seconds = Int(timeRemaining) % 60
         return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    var editableMinutes: Int {
+        get { Int(round(totalTime / 60)) }
+        set {
+            let clamped = max(1, min(180, newValue))
+            let dur = TimeInterval(clamped * 60)
+            totalTime = dur
+            if state == .idle || state == .paused || state == .finished {
+                timeRemaining = dur
+            } else if state == .running {
+                // Adjust remaining proportionally from edit
+                timeRemaining = min(timeRemaining, dur)
+                totalTime = dur
+                startDate = Date().addingTimeInterval(-(totalTime - timeRemaining))
+            }
+            persistCurrentPhaseDuration(minutes: clamped)
+        }
     }
 
     var totalTimeForPhase: TimeInterval {
@@ -77,6 +100,7 @@ final class PomodoroViewModel {
         totalTime = dur
         timeRemaining = dur
         state = .running
+        shouldAutoStartNext = autoContinue
         startDate = Date()
         startTimer()
     }
@@ -98,9 +122,11 @@ final class PomodoroViewModel {
         state = .idle
         phase = .focus
         cycleCount = 0
+        shouldAutoStartNext = false
         timeRemaining = totalTimeForPhase
         totalTime = totalTimeForPhase
         startDate = nil
+        isEditingDuration = false
     }
 
     func switchToPhase(_ newPhase: Phase) {
@@ -112,6 +138,24 @@ final class PomodoroViewModel {
         timeRemaining = dur
         state = .idle
         startDate = nil
+        isEditingDuration = false
+    }
+
+    /// Apply a custom duration (minutes) typed by the user on the timer display.
+    func applyEditedMinutes(_ minutes: Int) {
+        editableMinutes = minutes
+        isEditingDuration = false
+    }
+
+    private func persistCurrentPhaseDuration(minutes: Int) {
+        switch phase {
+        case .focus:
+            DataStore.shared.set(key: .pomodoroFocusDuration, value: Double(minutes))
+        case .shortBreak:
+            DataStore.shared.set(key: .pomodoroShortBreakDuration, value: Double(minutes))
+        case .longBreak:
+            DataStore.shared.set(key: .pomodoroLongBreakDuration, value: Double(minutes))
+        }
     }
 
     private func startTimer() {
@@ -135,9 +179,19 @@ final class PomodoroViewModel {
             let completedPhase = phase
             playAlarm()
             onComplete?(completedPhase)
-            NotificationCenter.default.post(name: .pomodoroComplete, object: nil)
-            sendNotification()
+            NotificationCenter.default.post(name: .pomodoroComplete, object: completedPhase.rawValue)
+            sendNotification(for: completedPhase)
             advanceCycle(from: completedPhase)
+
+            if shouldAutoStartNext && autoContinue {
+                // Brief pause so the user sees the phase change, then continue the loop
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    guard let self, self.autoContinue else { return }
+                    self.stopAlarm()
+                    self.start()
+                }
+            }
         }
     }
 
@@ -170,10 +224,16 @@ final class PomodoroViewModel {
         }
     }
 
-    private func sendNotification() {
+    private func sendNotification(for completedPhase: Phase) {
         let content = UNMutableNotificationContent()
-        content.title = phase == .focus ? "Focus Session Complete" : "Break Over"
-        content.body = phase == .focus ? "Time for a break!" : "Ready to focus again?"
+        switch completedPhase {
+        case .focus:
+            content.title = "Focus Complete"
+            content.body = "Time for a break — next phase starts automatically."
+        case .shortBreak, .longBreak:
+            content.title = "Break Over"
+            content.body = "Ready to focus again — next session starts automatically."
+        }
         content.sound = .default
 
         let request = UNNotificationRequest(

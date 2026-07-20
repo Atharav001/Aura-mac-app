@@ -70,16 +70,16 @@ struct NotchView: View {
         if DataStore.shared.bool(for: .disableOvershoot, default: false) {
             .easeInOut(duration: 0.22)
         } else {
-            .spring(response: 0.4, dampingFraction: 0.65, blendDuration: 0.25)
+            AnimationCurves.notchExpand
         }
     }
 
     private var shadowColor: Color {
-        appSettings.windowShadow ? .black.opacity(0.35) : .clear
+        appSettings.windowShadow ? .black.opacity(0.45) : .clear
     }
 
-    private var shadowRadius: CGFloat { appSettings.windowShadow ? 10 : 0 }
-    private var shadowY: CGFloat { appSettings.windowShadow ? 5 : 0 }
+    private var shadowRadius: CGFloat { appSettings.windowShadow ? 14 : 0 }
+    private var shadowY: CGFloat { appSettings.windowShadow ? 6 : 0 }
 
     // MARK: - System HUD Overlay
 
@@ -181,17 +181,31 @@ struct NotchView: View {
 
     @ViewBuilder
     private var materialOverlay: some View {
-        let variant = DataStore.shared.string(for: .glassVariant) ?? "sidebar"
-        Color.black.opacity(0.75)
+        let variant = DataStore.shared.string(for: .glassVariant) ?? "ios"
+        // Alcove-inspired liquid glass: deep black + progressive blur
+        LinearGradient(
+            colors: [
+                Color.black.opacity(0.92),
+                Color.black.opacity(0.78)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
         if variant == "clear" {
-            VisualEffectView(material: .contentBackground, blendingMode: .withinWindow)
-                .opacity(0.25)
+            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 0)
+                .opacity(0.35)
         } else if variant == "ios" {
-            VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
-                .opacity(0.45)
+            VisualEffectView(material: .hudWindow, blendingMode: .withinWindow, cornerRadius: 0)
+                .opacity(0.55)
+            // Subtle album-art bleed when media is playing
+            if DataStore.shared.bool(for: .playerTinting, default: true),
+               let color = viewModel.dominantColors.first {
+                Color(nsColor: color).opacity(0.12)
+                    .blendMode(.plusLighter)
+            }
         } else {
-            VisualEffectView(material: .sidebar, blendingMode: .withinWindow)
-                .opacity(0.4)
+            VisualEffectView(material: .sidebar, blendingMode: .withinWindow, cornerRadius: 0)
+                .opacity(0.42)
         }
     }
 
@@ -248,6 +262,12 @@ struct NotchView: View {
                 divider
             }
             tabView(for: viewModel.activeTab)
+                .id(viewModel.activeTab)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+                .animation(AnimationCurves.hudSlide, value: viewModel.activeTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxHeight: .infinity)
@@ -268,23 +288,27 @@ struct NotchView: View {
     private func tabItem(_ tab: NotchViewModel.NotchTab) -> some View {
         let isActive = viewModel.activeTab == tab
         let isHovered = hoveredControl == "tab-\(tab.rawValue)"
-        return Text(tab.rawValue)
-            .font(.system(size: 9, weight: isActive ? .semibold : .regular))
-            .foregroundColor(isActive ? .white : .white.opacity(isHovered ? 0.7 : 0.35))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule()
-                    .fill(isActive ? Color.white.opacity(0.12) : (isHovered ? Color.white.opacity(0.05) : .clear))
-            )
-            .onHover { h in hoveredControl = h ? "tab-\(tab.rawValue)" : nil }
-            .onTapGesture {
+        return Button {
+            withAnimation(AnimationCurves.hudSlide) {
                 viewModel.activeTab = tab
-                if DataStore.shared.bool(for: .rememberLastTab, default: false) {
-                    DataStore.shared.set(key: .lastActiveTab, value: tab.rawValue)
-                }
             }
-            .frame(maxWidth: .infinity)
+            if DataStore.shared.bool(for: .rememberLastTab, default: false) {
+                DataStore.shared.set(key: .lastActiveTab, value: tab.rawValue)
+            }
+        } label: {
+            Text(tab.rawValue)
+                .font(.system(size: 9, weight: isActive ? .semibold : .medium))
+                .foregroundColor(isActive ? .white : .white.opacity(isHovered ? 0.75 : 0.38))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(isActive ? Color.white.opacity(0.14) : (isHovered ? Color.white.opacity(0.06) : .clear))
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { h in hoveredControl = h ? "tab-\(tab.rawValue)" : nil }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Tab Views
@@ -309,12 +333,17 @@ struct NotchView: View {
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack(spacing: 12) {
-            responsiveIcon("house", id: "home", size: 11)
-            responsiveIcon("tray", id: "inbox", size: 11)
+        HStack(spacing: 10) {
             if appSettings.settingsIconInNotch {
                 responsiveIcon("gearshape", id: "settings", size: 11)
                     .onTapGesture { PanelManager.shared.openSettingsWindow() }
+            }
+
+            if viewModel.isDraggingToNotch {
+                Label("Drop to Shelf", systemImage: "tray.and.arrow.down.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.cyan)
+                    .transition(.opacity.combined(with: .scale))
             }
 
             Spacer()
@@ -334,6 +363,7 @@ struct NotchView: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 22)
+        .animation(AnimationCurves.hudSlide, value: viewModel.isDraggingToNotch)
     }
 
     private func responsiveIcon(_ systemName: String, id: String, size: CGFloat) -> some View {
@@ -378,24 +408,29 @@ struct NotchView: View {
 
     private var currentTrackView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 albumArtView(icon: viewModel.displayArt)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 48, height: 48)
+                    .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(viewModel.nowPlayingTitle)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                     Text(viewModel.nowPlayingArtist)
-                        .font(.system(size: 9))
+                        .font(.system(size: 10))
                         .foregroundColor(.white.opacity(0.5))
                         .lineLimit(1)
+                    if !viewModel.sourceAppName.isEmpty {
+                        Text(viewModel.sourceAppName)
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundColor(.white.opacity(0.28))
+                    }
                 }
 
                 Spacer(minLength: 4)
 
-                // Quality badges (Alcove-style)
                 if viewModel.hasLossless || viewModel.hasDolbyAtmos {
                     VStack(alignment: .trailing, spacing: 2) {
                         if viewModel.hasLossless {
@@ -408,38 +443,50 @@ struct NotchView: View {
                 }
             }
 
-            Spacer().frame(height: 6)
+            Spacer().frame(height: 8)
 
             if DataStore.shared.bool(for: .showVisualizer, default: false) && viewModel.isPlaying {
                 spectrogramView
                     .frame(height: 16)
             } else {
                 customProgressBar(value: viewModel.progress)
+                HStack {
+                    Text(viewModel.formattedElapsed)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.35))
+                    Spacer()
+                    Text(viewModel.formattedDuration)
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.35))
+                }
+                .padding(.top, 3)
             }
 
-            Spacer().frame(height: 6)
+            Spacer().frame(height: 8)
 
-            HStack(spacing: 14) {
-                responsiveButton("backward.fill", id: "back", size: 11) {
-                    viewModel.previousTrack()
-                }
-                responsiveButton(
-                    viewModel.isPlaying ? "pause.fill" : "play.fill",
-                    id: "playpause", size: 16, isPrimary: true
-                ) { viewModel.togglePlayPause() }
-                responsiveButton("forward.fill", id: "forward", size: 11) {
-                    viewModel.nextTrack()
-                }
-                Spacer()
-                if !viewModel.sourceAppName.isEmpty {
-                    Text(viewModel.sourceAppName)
-                        .font(.system(size: 8))
-                        .foregroundColor(.white.opacity(0.25))
-                        .lineLimit(1)
+            if DataStore.shared.bool(for: .showMediaControls, default: true) {
+                HStack(spacing: 18) {
+                    responsiveButton("gobackward.10", id: "skipback", size: 11) {
+                        MediaTracker.shared.skipBackward()
+                    }
+                    responsiveButton("backward.fill", id: "back", size: 12) {
+                        viewModel.previousTrack()
+                    }
+                    responsiveButton(
+                        viewModel.isPlaying ? "pause.fill" : "play.fill",
+                        id: "playpause", size: 18, isPrimary: true
+                    ) { viewModel.togglePlayPause() }
+                    responsiveButton("forward.fill", id: "forward", size: 12) {
+                        viewModel.nextTrack()
+                    }
+                    responsiveButton("goforward.10", id: "skipfwd", size: 11) {
+                        MediaTracker.shared.skipForward()
+                    }
+                    Spacer()
                 }
             }
         }
-        .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+        .padding(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
         .frame(maxHeight: .infinity, alignment: .top)
         .contentShape(Rectangle())
     }
@@ -560,7 +607,7 @@ struct NotchView: View {
         .onHover { h in hoveredControl = h ? id : (hoveredControl == id ? nil : hoveredControl) }
     }
 
-    // MARK: - Clipboard View (Enhanced with pin/unpin visual states)
+    // MARK: - Clipboard View
 
     private var clipboardView: some View {
         VStack(spacing: 0) {
@@ -569,9 +616,16 @@ struct NotchView: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white)
                 Spacer()
-                Text("\(viewModel.clipboardHistory.count) items")
+                Text("\(viewModel.clipboardHistory.count) · 7 days")
                     .font(.system(size: 7))
                     .foregroundColor(.white.opacity(0.3))
+                Toggle("", isOn: Binding(
+                    get: { DataStore.shared.bool(for: .clipboardEnabled, default: true) },
+                    set: { DataStore.shared.set(key: .clipboardEnabled, value: $0) }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
             }
             .padding(.horizontal, 8)
             .padding(.top, 6)
@@ -587,14 +641,22 @@ struct NotchView: View {
             } else {
                 ScrollView(.vertical) {
                     VStack(spacing: 2) {
-                        ForEach(viewModel.clipboardHistory.prefix(10)) { item in
+                        ForEach(viewModel.clipboardHistory.prefix(20)) { item in
                             HStack(spacing: 6) {
-                                Image(systemName: viewModel.clipboardPinned.contains(item.id) ? "pin.fill" : "pin")
+                                Image(systemName: item.isPinned ? "pin.fill" : "pin")
                                     .font(.system(size: 7))
-                                    .foregroundColor(viewModel.clipboardPinned.contains(item.id) ? .yellow : .white.opacity(0.2))
+                                    .foregroundColor(item.isPinned ? .yellow : .white.opacity(0.2))
                                     .onTapGesture { viewModel.toggleClipboardPinned(item.id) }
 
-                                Text(item.text)
+                                if item.hasImage, let data = item.imageData, let img = NSImage(data: data) {
+                                    Image(nsImage: img)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 22, height: 22)
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                }
+
+                                Text(item.hasImage ? "Image" : item.text)
                                     .font(.system(size: 8))
                                     .foregroundColor(.white.opacity(0.65))
                                     .lineLimit(1)
@@ -604,15 +666,29 @@ struct NotchView: View {
                                 Text(item.sourceApp)
                                     .font(.system(size: 6))
                                     .foregroundColor(.white.opacity(0.25))
+                                    .lineLimit(1)
                             }
                             .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(viewModel.clipboardPinned.contains(item.id) ? Color.yellow.opacity(0.06) : Color.clear)
+                            .padding(.vertical, 4)
+                            .background(item.isPinned ? Color.yellow.opacity(0.07) : Color.clear)
                             .clipShape(RoundedRectangle(cornerRadius: 4))
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(item.text, forType: .string)
+                                let pb = NSPasteboard.general
+                                pb.clearContents()
+                                if let data = item.imageData, let img = NSImage(data: data) {
+                                    pb.writeObjects([img])
+                                } else {
+                                    pb.setString(item.text, forType: .string)
+                                }
+                            }
+                            .contextMenu {
+                                Button(item.isPinned ? "Unpin" : "Pin forever") {
+                                    viewModel.toggleClipboardPinned(item.id)
+                                }
+                                Button("Delete", role: .destructive) {
+                                    viewModel.deleteClipboardItem(item.id)
+                                }
                             }
                         }
                     }
@@ -670,6 +746,7 @@ struct NotchView: View {
                 )
                 .padding(.horizontal, 6)
                 .onDrop(of: [.fileURL], isTargeted: $dragOverShelf) { providers in
+                    guard DataStore.shared.bool(for: .shelfEnabled, default: true) else { return false }
                     for provider in providers {
                         _ = provider.loadObject(ofClass: URL.self) { url, _ in
                             if let url { Task { @MainActor in viewModel.addShelfItem(url) } }
@@ -685,6 +762,15 @@ struct NotchView: View {
                         }
                     }
                     .padding(.horizontal, 6)
+                }
+                .onDrop(of: [.fileURL], isTargeted: $dragOverShelf) { providers in
+                    guard DataStore.shared.bool(for: .shelfEnabled, default: true) else { return false }
+                    for provider in providers {
+                        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                            if let url { Task { @MainActor in viewModel.addShelfItem(url) } }
+                        }
+                    }
+                    return true
                 }
             }
         }
@@ -711,159 +797,232 @@ struct NotchView: View {
         }
         .padding(4)
         .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.06)))
-        .onDrag { NSItemProvider(object: url as NSURL) }
+        .onDrag {
+            viewModel.dragOutShelfItem(url)
+            return NSItemProvider(object: url as NSURL)
+        }
     }
 
     // MARK: - Pomodoro View
 
     private var pomodoroView: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 0) {
             leftTimerColumn
+            divider
+                .padding(.vertical, 12)
             rightControlColumn
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .overlay(alignment: .top) {
+            pomodoroProgressBar
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var pomodoroProgressBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(.white.opacity(0.06))
+                    .frame(height: 2)
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(
+                        pomodoroModel.state == .finished
+                            ? Color.green.opacity(0.7)
+                            : pomodoroPhaseColor(pomodoroModel.phase).opacity(0.7)
+                    )
+                    .frame(width: geo.size.width * CGFloat(pomodoroModel.progress), height: 2)
+                    .animation(.linear(duration: 0.3), value: pomodoroModel.progress)
+            }
+        }
+        .frame(height: 2)
     }
 
     private var leftTimerColumn: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
             ZStack {
                 Circle()
-                    .stroke(.white.opacity(0.08), lineWidth: 5)
+                    .stroke(.white.opacity(0.06), lineWidth: 6)
                 Circle()
                     .trim(from: 0, to: pomodoroModel.progress)
                     .stroke(
-                        AngularGradient(colors: [.blue.opacity(0.6), .purple.opacity(0.6), .cyan.opacity(0.6)], center: .center),
-                        style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                        AngularGradient(
+                            colors: [pomodoroPhaseColor(pomodoroModel.phase).opacity(0.4), pomodoroPhaseColor(pomodoroModel.phase)],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.3), value: pomodoroModel.progress)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.65), value: pomodoroModel.progress)
 
-                VStack(spacing: 2) {
+                VStack(spacing: 4) {
                     Text(pomodoroModel.formattedTime)
-                        .font(.system(size: 22, weight: .bold, design: .monospaced))
+                        .font(.system(size: 26, weight: .bold, design: .monospaced))
                         .foregroundStyle(.white)
                         .contentTransition(.numericText())
                         .animation(.linear(duration: 0.15), value: pomodoroModel.timeRemaining)
-                    Text(pomodoroModel.state.label)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .onTapGesture {
+                            // Cycle common durations with a click; long sessions via Settings
+                            let next = [15, 20, 25, 30, 45, 50, 60]
+                            let current = max(1, Int(pomodoroModel.timeRemaining / 60))
+                            let idx = next.firstIndex(of: current).map { ($0 + 1) % next.count } ?? 0
+                            pomodoroModel.applyEditedMinutes(next[idx])
+                            if pomodoroModel.state == .idle {
+                                pomodoroModel.timeRemaining = pomodoroModel.totalTime
+                            }
+                        }
+                        .help("Click to change duration")
+                    HStack(spacing: 4) {
+                        Image(systemName: pomodoroStateIcon)
+                            .font(.system(size: 7, weight: .semibold))
+                            .foregroundStyle(pomodoroStateColor)
+                        Text(pomodoroModel.state.label)
+                            .font(.system(size: 8, weight: .medium))
+                            .foregroundStyle(pomodoroStateColor)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(pomodoroStateColor.opacity(0.12))
+                    .clipShape(Capsule())
                 }
             }
-            .frame(width: 100, height: 100)
+            .frame(width: 96, height: 96)
 
-            HStack(spacing: 4) {
-                ForEach(PomodoroViewModel.Phase.allCases, id: \.self) { phase in
-                    Circle()
-                        .fill(phaseColor(phase))
-                        .frame(width: 6, height: 6)
-                        .opacity(pomodoroModel.phase == phase ? 1 : 0.2)
-                }
-                Text(pomodoroModel.phase.rawValue)
-                    .font(.system(size: 8, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .padding(.leading, 2)
-            }
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var pomodoroStateIcon: String {
+        switch pomodoroModel.state {
+        case .idle: return "play"
+        case .running: return "play.fill"
+        case .paused: return "pause.fill"
+        case .finished: return "checkmark.circle.fill"
+        }
+    }
+
+    private var pomodoroStateColor: Color {
+        switch pomodoroModel.state {
+        case .idle: return .white.opacity(0.4)
+        case .running: return pomodoroPhaseColor(pomodoroModel.phase)
+        case .paused: return .white.opacity(0.6)
+        case .finished: return .green
+        }
     }
 
     private var rightControlColumn: some View {
-        VStack(spacing: 8) {
-            durationRow(label: "Focus", dataStoreKey: .pomodoroFocusDuration, defaultMinutes: 25)
-            durationRow(label: "Break", dataStoreKey: .pomodoroShortBreakDuration, defaultMinutes: 5)
-            durationRow(label: "Long", dataStoreKey: .pomodoroLongBreakDuration, defaultMinutes: 15)
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            VStack(spacing: 10) {
+                stepperRow(label: "Focus", dataStoreKey: .pomodoroFocusDuration, defaultMinutes: 25)
+                stepperRow(label: "Break", dataStoreKey: .pomodoroShortBreakDuration, defaultMinutes: 5)
+                stepperRow(label: "Long", dataStoreKey: .pomodoroLongBreakDuration, defaultMinutes: 15)
+            }
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 if pomodoroModel.state == .idle || pomodoroModel.state == .finished {
-                    pomodoroButton(icon: "play.fill", label: "Start") {
-                        pomodoroModel.start()
-                    }
+                    premiumPlayButton(action: { pomodoroModel.start() })
                 } else {
-                    pomodoroButton(
+                    premiumPlayButton(
                         icon: pomodoroModel.state == .running ? "pause.fill" : "play.fill",
-                        label: pomodoroModel.state == .running ? "Pause" : "Resume"
-                    ) {
-                        pomodoroModel.togglePause()
-                    }
-                    pomodoroButton(icon: "arrow.counterclockwise", label: "Reset", tint: .white.opacity(0.5)) {
-                        pomodoroModel.reset()
-                    }
+                        action: { pomodoroModel.togglePause() }
+                    )
+                    resetIconButton(action: { pomodoroModel.reset() })
                 }
             }
+            .padding(.bottom, 2)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
     }
 
-    private func durationRow(label: String, dataStoreKey: DataStore.SettingKey, defaultMinutes: Int) -> some View {
+    private func stepperRow(label: String, dataStoreKey: DataStore.SettingKey, defaultMinutes: Int) -> some View {
         let duration = DataStore.shared.double(for: dataStoreKey, default: Double(defaultMinutes))
-        return HStack(spacing: 6) {
+        return HStack(spacing: 8) {
             Text(label)
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
-                .frame(width: 32, alignment: .leading)
+                .foregroundStyle(.white.opacity(0.45))
+                .frame(width: 32, alignment: .trailing)
 
-            Spacer(minLength: 0)
-
-            Button {
-                let current = DataStore.shared.double(for: dataStoreKey, default: Double(defaultMinutes))
-                let new = max(1, current - 1)
-                DataStore.shared.set(key: dataStoreKey, value: new)
-                if pomodoroModel.state == .idle {
-                    pomodoroModel.switchToPhase(pomodoroModel.phase)
+            HStack(spacing: 0) {
+                Button {
+                    let current = DataStore.shared.double(for: dataStoreKey, default: Double(defaultMinutes))
+                    let new = max(1, current - 1)
+                    DataStore.shared.set(key: dataStoreKey, value: new)
+                    if pomodoroModel.state == .idle {
+                        pomodoroModel.switchToPhase(pomodoroModel.phase)
+                    }
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .frame(width: 24, height: 24)
                 }
-            } label: {
-                Image(systemName: "minus")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: 20, height: 20)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
-            }
-            .buttonStyle(.plain)
+                .buttonStyle(.plain)
 
-            Text("\(Int(duration))m")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.white)
-                .frame(width: 28, alignment: .trailing)
+                Text("\(Int(duration))m")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .frame(minWidth: 30, alignment: .center)
 
-            Button {
-                let current = DataStore.shared.double(for: dataStoreKey, default: Double(defaultMinutes))
-                let new = min(120, current + 1)
-                DataStore.shared.set(key: dataStoreKey, value: new)
-                if pomodoroModel.state == .idle {
-                    pomodoroModel.switchToPhase(pomodoroModel.phase)
+                Button {
+                    let current = DataStore.shared.double(for: dataStoreKey, default: Double(defaultMinutes))
+                    let new = min(120, current + 1)
+                    DataStore.shared.set(key: dataStoreKey, value: new)
+                    if pomodoroModel.state == .idle {
+                        pomodoroModel.switchToPhase(pomodoroModel.phase)
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .frame(width: 24, height: 24)
                 }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: 20, height: 20)
-                    .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 
-    private func pomodoroButton(icon: String, label: String, tint: Color = .white, action: @escaping () -> Void) -> some View {
+    private func premiumPlayButton(icon: String = "play.fill", action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .fill(pomodoroPhaseColor(pomodoroModel.phase).opacity(0.2))
+                    .frame(width: 40, height: 40)
+                Circle()
+                    .stroke(pomodoroPhaseColor(pomodoroModel.phase).opacity(0.3), lineWidth: 1)
+                    .frame(width: 40, height: 40)
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
-                Text(label)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .offset(x: icon == "play.fill" ? 1.5 : 0)
             }
-            .foregroundStyle(tint)
-            .frame(maxWidth: .infinity)
-            .frame(height: 28)
-            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
     }
 
-    private func phaseColor(_ phase: PomodoroViewModel.Phase) -> Color {
+    private func resetIconButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.06))
+                    .frame(width: 36, height: 36)
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func pomodoroPhaseColor(_ phase: PomodoroViewModel.Phase) -> Color {
         switch phase {
         case .focus: return .blue
         case .shortBreak: return .green
@@ -1224,13 +1383,9 @@ struct NotchView: View {
     // MARK: - Clipboard Monitoring
 
     private func startClipboardMonitoring() {
-        guard DataStore.shared.bool(for: .clipboardEnabled, default: true) else { return }
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            let item = NSPasteboard.general.string(forType: .string)
+        Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { _ in
             Task { @MainActor in
-                if let item, item != viewModel.clipboardHistory.first?.text {
-                    viewModel.addClipboardItem(item, sourceApp: "System")
-                }
+                viewModel.pollClipboard()
             }
         }
     }

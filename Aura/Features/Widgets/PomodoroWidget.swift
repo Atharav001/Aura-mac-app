@@ -2,6 +2,8 @@ import SwiftUI
 
 struct PomodoroWidget: View {
     @State private var viewModel = PomodoroViewModel()
+    @State private var editText = ""
+    @FocusState private var isEditingFocused: Bool
     let initialDuration: TimeInterval?
 
     init(initialDuration: TimeInterval? = nil) {
@@ -28,7 +30,11 @@ struct PomodoroWidget: View {
                     .trim(from: 0, to: viewModel.progress)
                     .stroke(
                         AngularGradient(
-                            colors: [.blue.opacity(0.6), .purple.opacity(0.6), .cyan.opacity(0.6)],
+                            colors: [
+                                phaseColor(viewModel.phase).opacity(0.45),
+                                phaseColor(viewModel.phase).opacity(0.9),
+                                .cyan.opacity(0.5)
+                            ],
                             center: .center
                         ),
                         style: StrokeStyle(lineWidth: 6, lineCap: .round)
@@ -37,15 +43,38 @@ struct PomodoroWidget: View {
                     .animation(.linear(duration: 0.3), value: viewModel.progress)
 
                 VStack(spacing: 4) {
-                    Text(viewModel.formattedTime)
-                        .font(.system(size: 36, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white)
-                        .contentTransition(.numericText())
-                        .animation(.linear(duration: 0.15), value: viewModel.timeRemaining)
+                    if viewModel.isEditingDuration {
+                        TextField("", text: $editText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 32, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 100)
+                            .focused($isEditingFocused)
+                            .onSubmit { commitEdit() }
+                            .onAppear {
+                                editText = "\(viewModel.editableMinutes)"
+                                isEditingFocused = true
+                            }
+                        Text("min · Enter to save")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.4))
+                    } else {
+                        Text(viewModel.formattedTime)
+                            .font(.system(size: 36, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.white)
+                            .contentTransition(.numericText())
+                            .animation(.linear(duration: 0.15), value: viewModel.timeRemaining)
+                            .onTapGesture {
+                                viewModel.isEditingDuration = true
+                                editText = "\(max(1, Int(viewModel.timeRemaining / 60)))"
+                            }
+                            .help("Click to edit duration")
 
-                    Text(viewModel.state.label)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.45))
+                        Text(viewModel.state.label)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
                 }
             }
             .frame(width: 160, height: 160)
@@ -56,8 +85,10 @@ struct PomodoroWidget: View {
                         viewModel.start()
                     }
                 } else {
-                    widgetButton(icon: viewModel.state == .running ? "pause.fill" : "play.fill",
-                                 label: viewModel.state == .running ? "Pause" : "Resume") {
+                    widgetButton(
+                        icon: viewModel.state == .running ? "pause.fill" : "play.fill",
+                        label: viewModel.state == .running ? "Pause" : "Resume"
+                    ) {
                         viewModel.togglePause()
                     }
 
@@ -69,6 +100,15 @@ struct PomodoroWidget: View {
 
             phasePicker
 
+            Toggle(isOn: $viewModel.autoContinue) {
+                Text("Auto loop focus ↔ break")
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .tint(.blue.opacity(0.7))
+
             if viewModel.isAlarmPlaying {
                 alarmControls
             } else if viewModel.state == .idle {
@@ -76,29 +116,40 @@ struct PomodoroWidget: View {
             }
         }
         .padding(.vertical, 8)
+        .onAppear {
+            if viewModel.state == .idle, let dur = initialDuration {
+                viewModel.start(duration: dur)
+            }
+        }
+    }
+
+    private func commitEdit() {
+        let minutes = Int(editText.trimmingCharacters(in: .whitespaces)) ?? viewModel.editableMinutes
+        viewModel.applyEditedMinutes(minutes)
+        if viewModel.state == .idle {
+            // keep idle ready with new duration
+        }
     }
 
     private var alarmControls: some View {
-        HStack(spacing: 8) {
-            Button {
-                viewModel.stopAlarm()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "bell.slash.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                    Text("Stop Alarm")
-                        .font(.system(size: 10, weight: .medium))
-                }
-                .foregroundStyle(.red.opacity(0.7))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(.red.opacity(0.12))
-                )
+        Button {
+            viewModel.stopAlarm()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "bell.slash.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Stop Alarm")
+                    .font(.system(size: 10, weight: .medium))
             }
-            .buttonStyle(.plain)
+            .foregroundStyle(.red.opacity(0.7))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.red.opacity(0.12))
+            )
         }
+        .buttonStyle(.plain)
     }
 
     private var alarmSelectButton: some View {
@@ -202,7 +253,7 @@ extension PomodoroViewModel.State {
     var label: String {
         switch self {
         case .idle: return "Ready"
-        case .running: return "Focus"
+        case .running: return "Running"
         case .paused: return "Paused"
         case .finished: return "Complete!"
         }

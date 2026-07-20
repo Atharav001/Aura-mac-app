@@ -12,6 +12,7 @@ final class MediaTracker: @unchecked Sendable {
     static let shared = MediaTracker()
 
     private var pollingTimer: Timer?
+    private var progressTimer: Timer?
 
     struct NowPlayingInfo: Equatable {
         let title: String
@@ -25,7 +26,7 @@ final class MediaTracker: @unchecked Sendable {
             lhs.title == rhs.title &&
             lhs.artist == rhs.artist &&
             lhs.duration == rhs.duration &&
-            lhs.elapsedTime == rhs.elapsedTime &&
+            abs(lhs.elapsedTime - rhs.elapsedTime) < 0.4 &&
             lhs.isPlaying == rhs.isPlaying &&
             lhs.sourceApp == rhs.sourceApp
         }
@@ -41,7 +42,6 @@ final class MediaTracker: @unchecked Sendable {
         isAppleMusicConnected = DataStore.shared.bool(for: .appleMusicEnabled, default: true)
         setupRemoteCommands()
 
-        // Listen for Spotify playback changes
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(spotifyPlaybackChanged),
@@ -49,7 +49,6 @@ final class MediaTracker: @unchecked Sendable {
             object: nil
         )
 
-        // Listen for Apple Music / iTunes playback changes
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(appleMusicPlaybackChanged),
@@ -57,18 +56,42 @@ final class MediaTracker: @unchecked Sendable {
             object: nil
         )
 
-        // Poll as fallback for browsers and other apps
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRemoteToggle),
+            name: .remoteTogglePlayPause,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRemoteNext),
+            name: .remoteNextTrack,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRemotePrevious),
+            name: .remotePreviousTrack,
+            object: nil
+        )
+
+        // Poll progress + recover state if notifications were missed
         pollingTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            self?.pollBrowserMedia()
+            self?.pollActivePlayer()
+        }
+        progressTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.tickLocalProgress()
         }
     }
 
     func stopTracking() {
         pollingTimer?.invalidate()
         pollingTimer = nil
+        progressTimer?.invalidate()
+        progressTimer = nil
     }
 
-    // MARK: - Spotify Detection
+    // MARK: - Spotify
 
     @objc private func spotifyPlaybackChanged(_ notification: Notification) {
         guard isSpotifyConnected else { return }
@@ -82,29 +105,21 @@ final class MediaTracker: @unchecked Sendable {
         let isPlaying = playerState == "Playing"
 
         guard !trackName.isEmpty else {
-            if lastInfo != nil {
-                lastInfo = nil
-                onUpdate?(nil)
-            }
+            clearIfSource("com.spotify.client")
             return
         }
 
-        let info = NowPlayingInfo(
+        publish(NowPlayingInfo(
             title: trackName,
             artist: artistName,
             duration: duration,
             elapsedTime: position,
             isPlaying: isPlaying,
             sourceApp: "com.spotify.client"
-        )
-
-        if info != lastInfo {
-            lastInfo = info
-            onUpdate?(info)
-        }
+        ))
     }
 
-    // MARK: - Apple Music Detection
+    // MARK: - Apple Music
 
     @objc private func appleMusicPlaybackChanged(_ notification: Notification) {
         guard isAppleMusicConnected else { return }
@@ -118,51 +133,64 @@ final class MediaTracker: @unchecked Sendable {
         let isPlaying = playerState == "Playing"
 
         guard !trackName.isEmpty else {
-            if lastInfo != nil {
-                lastInfo = nil
-                onUpdate?(nil)
-            }
+            clearIfSource("com.apple.Music")
             return
         }
 
-        let info = NowPlayingInfo(
+        publish(NowPlayingInfo(
             title: trackName,
             artist: artistName,
             duration: duration,
             elapsedTime: elapsedTime,
             isPlaying: isPlaying,
             sourceApp: "com.apple.Music"
-        )
+        ))
+    }
 
-        if info != lastInfo {
-            lastInfo = info
-            onUpdate?(info)
+    private func clearIfSource(_ bundleID: String) {
+        if lastInfo?.sourceApp == bundleID {
+            lastInfo = nil
+            onUpdate?(nil)
         }
     }
 
-    // MARK: - Browser & Fallback Detection
+    private func publish(_ info: NowPlayingInfo) {
+        if info != lastInfo {
+            lastInfo = info
+            onUpdate?(info)
+            NotificationCenter.default.post(name: .nowPlayingDidChange, object: nil)
+        }
+    }
 
-    private func pollBrowserMedia() {
-        let browserBundleIDs: Set<String> = [
-            "com.apple.WebKit.WebContent",
-            "com.google.Chrome",
-            "com.brave.Browser",
-            "com.microsoft.edgemac",
-            "com.operasoftware.Opera",
-            "com.vivaldi.Vivaldi"
-        ]
+    private func tickLocalProgress() {
+        guard let info = lastInfo, info.isPlaying, info.duration > 0 else { return }
+        let next = NowPlayingInfo(
+            title: info.title,
+            artist: info.artist,
+            duration: info.duration,
+            elapsedTime: min(info.duration, info.elapsedTime + 1),
+            isPlaying: true,
+            sourceApp: info.sourceApp
+        )
+        lastInfo = next
+        onUpdate?(next)
+    }
 
-        guard let sourceBundleID = lastInfo?.sourceApp,
-              browserBundleIDs.contains(sourceBundleID) else { return }
-
-        // Only clear if the source browser is no longer running
-        let appRunning = NSWorkspace.shared.runningApplications.contains(where: {
-            $0.bundleIdentifier == sourceBundleID
-        })
-
-        if !appRunning {
-            lastInfo = nil
-            onUpdate?(nil)
+    private func pollActivePlayer() {
+        // Soft refresh via AppleScript when we have an active source
+        guard let source = lastInfo?.sourceApp else {
+            // Try to discover currently playing Spotify/Music
+            if isSpotifyConnected, let info = querySpotify() {
+                publish(info)
+            } else if isAppleMusicConnected, let info = queryAppleMusic() {
+                publish(info)
+            }
+            return
+        }
+        if source == "com.spotify.client", isSpotifyConnected, let info = querySpotify() {
+            publish(info)
+        } else if source == "com.apple.Music", isAppleMusicConnected, let info = queryAppleMusic() {
+            publish(info)
         }
     }
 
@@ -182,77 +210,193 @@ final class MediaTracker: @unchecked Sendable {
 
     func sourceAppInfo() -> (bundleID: String, name: String, icon: NSImage?)? {
         guard let sourceBundleID = lastInfo?.sourceApp else { return nil }
-        // Use the exact source app reported by the notification, not a random running app
         let runningApp = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == sourceBundleID
         })
         if let app = runningApp, let bundleID = app.bundleIdentifier {
             return (bundleID, app.localizedName ?? bundleID, app.icon)
         }
-        // Fallback: return bundle ID with name from a known mapping
-        let name = sourceAppNameForBundle(sourceBundleID)
-        return (sourceBundleID, name, nil)
+        return (sourceBundleID, sourceAppNameForBundle(sourceBundleID), nil)
     }
 
     private func sourceAppNameForBundle(_ bundleID: String) -> String {
         switch bundleID {
         case "com.spotify.client": return "Spotify"
         case "com.apple.Music", "com.apple.iTunes": return "Apple Music"
-        case "com.apple.WebKit.WebContent": return "Safari"
-        case "com.google.Chrome": return "Chrome"
-        case "com.brave.Browser": return "Brave"
-        case "com.microsoft.edgemac": return "Edge"
-        case "com.operasoftware.Opera": return "Opera"
-        case "com.vivaldi.Vivaldi": return "Vivaldi"
         default: return bundleID
         }
     }
 
     // MARK: - Remote Commands
 
+    @objc private func handleRemoteToggle() { togglePlayPause() }
+    @objc private func handleRemoteNext() { nextTrack() }
+    @objc private func handleRemotePrevious() { previousTrack() }
+
+    func togglePlayPause() {
+        if lastInfo?.sourceApp == "com.spotify.client" {
+            runAppleScript("""
+            tell application "Spotify"
+                if player state is playing then
+                    pause
+                else
+                    play
+                end if
+            end tell
+            """)
+        } else if lastInfo?.sourceApp == "com.apple.Music" {
+            runAppleScript("""
+            tell application "Music"
+                if player state is playing then
+                    pause
+                else
+                    play
+                end if
+            end tell
+            """)
+        } else {
+            Task { @MainActor in LocalAudioManager.shared.togglePlayPause() }
+        }
+    }
+
+    func nextTrack() {
+        if lastInfo?.sourceApp == "com.spotify.client" {
+            runAppleScript("tell application \"Spotify\" to next track")
+        } else if lastInfo?.sourceApp == "com.apple.Music" {
+            runAppleScript("tell application \"Music\" to next track")
+        } else {
+            // Local playlist advances are handled by AudioPlayerView observers
+            NotificationCenter.default.post(name: Notification.Name("com.aura.localNextTrack"), object: nil)
+        }
+    }
+
+    func previousTrack() {
+        if lastInfo?.sourceApp == "com.spotify.client" {
+            runAppleScript("tell application \"Spotify\" to previous track")
+        } else if lastInfo?.sourceApp == "com.apple.Music" {
+            runAppleScript("tell application \"Music\" to previous track")
+        } else {
+            NotificationCenter.default.post(name: Notification.Name("com.aura.localPreviousTrack"), object: nil)
+        }
+    }
+
+    func skipForward() {
+        let seconds = skipIncrementSeconds()
+        if lastInfo?.sourceApp == "com.spotify.client" {
+            runAppleScript("tell application \"Spotify\" to set player position to ((player position) + \(seconds))")
+        } else if lastInfo?.sourceApp == "com.apple.Music" {
+            runAppleScript("tell application \"Music\" to set player position to ((player position) + \(seconds))")
+        }
+    }
+
+    func skipBackward() {
+        let seconds = skipIncrementSeconds()
+        if lastInfo?.sourceApp == "com.spotify.client" {
+            runAppleScript("tell application \"Spotify\"\nset player position to ((player position) - \(seconds))\nif player position < 0 then set player position to 0\nend tell")
+        } else if lastInfo?.sourceApp == "com.apple.Music" {
+            runAppleScript("tell application \"Music\"\nset player position to ((player position) - \(seconds))\nif player position < 0 then set player position to 0\nend tell")
+        }
+    }
+
+    private func skipIncrementSeconds() -> Int {
+        let raw = DataStore.shared.string(for: .skipIncrement) ?? "15s"
+        return Int(raw.replacingOccurrences(of: "s", with: "")) ?? 15
+    }
+
     private func setupRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
-
         center.playCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                LocalAudioManager.shared.togglePlayPause()
-            }
+            self?.togglePlayPause()
             return .success
         }
-
         center.pauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                LocalAudioManager.shared.togglePlayPause()
-            }
+            self?.togglePlayPause()
             return .success
         }
-
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in
-                LocalAudioManager.shared.togglePlayPause()
-            }
+            self?.togglePlayPause()
             return .success
         }
+        center.nextTrackCommand.addTarget { [weak self] _ in
+            self?.nextTrack()
+            return .success
+        }
+        center.previousTrackCommand.addTarget { [weak self] _ in
+            self?.previousTrack()
+            return .success
+        }
+    }
 
-        center.nextTrackCommand.addTarget { _ in
-            NotificationCenter.default.post(name: .remoteNextTrack, object: nil)
-            return .success
-        }
+    // MARK: - AppleScript helpers
 
-        center.previousTrackCommand.addTarget { _ in
-            NotificationCenter.default.post(name: .remotePreviousTrack, object: nil)
-            return .success
+    private func runAppleScript(_ source: String) {
+        var error: NSDictionary?
+        if let script = NSAppleScript(source: source) {
+            script.executeAndReturnError(&error)
         }
+    }
 
-        center.changePlaybackPositionCommand.addTarget { event in
-            guard let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
-                return .commandFailed
-            }
-            let time = positionEvent.positionTime
-            Task { @MainActor in
-                LocalAudioManager.shared.seek(to: time)
-            }
-            return .success
-        }
+    private func querySpotify() -> NowPlayingInfo? {
+        let source = """
+        tell application "System Events"
+            if not (exists process "Spotify") then return ""
+        end tell
+        tell application "Spotify"
+            if player state is stopped then return ""
+            set t to name of current track
+            set a to artist of current track
+            set d to (duration of current track) / 1000
+            set p to player position
+            set s to player state as string
+            return t & "|||" & a & "|||" & d & "|||" & p & "|||" & s
+        end tell
+        """
+        guard let raw = runAppleScriptReturning(source), !raw.isEmpty else { return nil }
+        let parts = raw.components(separatedBy: "|||")
+        guard parts.count >= 5 else { return nil }
+        return NowPlayingInfo(
+            title: parts[0],
+            artist: parts[1],
+            duration: Double(parts[2]) ?? 0,
+            elapsedTime: Double(parts[3]) ?? 0,
+            isPlaying: parts[4].lowercased().contains("playing"),
+            sourceApp: "com.spotify.client"
+        )
+    }
+
+    private func queryAppleMusic() -> NowPlayingInfo? {
+        let source = """
+        tell application "System Events"
+            if not (exists process "Music") then return ""
+        end tell
+        tell application "Music"
+            if player state is stopped then return ""
+            set t to name of current track
+            set a to artist of current track
+            set d to duration of current track
+            set p to player position
+            set s to player state as string
+            return t & "|||" & a & "|||" & d & "|||" & p & "|||" & s
+        end tell
+        """
+        guard let raw = runAppleScriptReturning(source), !raw.isEmpty else { return nil }
+        let parts = raw.components(separatedBy: "|||")
+        guard parts.count >= 5 else { return nil }
+        return NowPlayingInfo(
+            title: parts[0],
+            artist: parts[1],
+            duration: Double(parts[2]) ?? 0,
+            elapsedTime: Double(parts[3]) ?? 0,
+            isPlaying: parts[4].lowercased().contains("playing"),
+            sourceApp: "com.apple.Music"
+        )
+    }
+
+    private func runAppleScriptReturning(_ source: String) -> String? {
+        var error: NSDictionary?
+        guard let script = NSAppleScript(source: source) else { return nil }
+        let result = script.executeAndReturnError(&error)
+        if error != nil { return nil }
+        return result.stringValue
     }
 }
