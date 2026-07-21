@@ -13,6 +13,8 @@ final class BoringNotchHost {
     private var window: NSWindow?
     private var windows: [String: NSWindow] = [:]
     private var viewModels: [String: BoringViewModel] = [:]
+    private var hostingViews: [ObjectIdentifier: NotchPassThroughHostingView<AnyView>] = [:]
+    private var cancellables = Set<AnyCancellable>()
     private var screenObserver: NSObjectProtocol?
     private var selectedScreenObserver: NSObjectProtocol?
     private var notchHeightObserver: NSObjectProtocol?
@@ -21,14 +23,12 @@ final class BoringNotchHost {
     private init() {}
 
     func setup() {
-        // Skip BN onboarding gate — otherwise hover never opens the notch
         UserDefaults.standard.set(false, forKey: "firstLaunch")
         UserDefaults.standard.set(false, forKey: "showWhatsNew")
         BoringViewCoordinator.shared.firstLaunch = false
         BoringViewCoordinator.shared.showWhatsNew = false
         BoringViewCoordinator.shared.helloAnimationRunning = false
 
-        // Force Apple Music / Spotify controllers — MediaRemote adapter framework is not bundled in SPM
         if Defaults[.mediaController] == .nowPlaying {
             Defaults[.mediaController] = MusicManager.shared.isNowPlayingDeprecated ? .appleMusic : .spotify
         }
@@ -38,6 +38,21 @@ final class BoringNotchHost {
         _ = MusicManager.shared
         _ = BatteryStatusViewModel.shared
         _ = CalendarManager.shared
+
+        // Keep hit-testing in sync when notch opens / live activity widens
+        vm.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshHitTesting()
+            }
+            .store(in: &cancellables)
+
+        MusicManager.shared.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.refreshHitTesting()
+            }
+            .store(in: &cancellables)
 
         adjustWindowPosition(changeAlpha: true)
 
@@ -87,21 +102,68 @@ final class BoringNotchHost {
             defer: false
         )
 
-        let hosting = NSHostingView(
-            rootView: ContentView()
+        let root = AnyView(
+            ContentView()
                 .environmentObject(viewModel)
         )
+        let hosting = NotchPassThroughHostingView(rootView: root)
         hosting.frame = rect
         hosting.autoresizingMask = [.width, .height]
+        hosting.interactiveRectProvider = { [weak hosting, weak viewModel] in
+            guard let hosting, let viewModel else { return .zero }
+            return Self.interactiveRect(for: viewModel, in: hosting.bounds)
+        }
         panel.contentView = hosting
+        hostingViews[ObjectIdentifier(panel)] = hosting
 
-        // Critical: receive hover / clicks (do NOT use BN CGSSpace — breaks hit testing in Aura)
         panel.ignoresMouseEvents = false
         panel.acceptsMouseMovedEvents = true
         panel.hidesOnDeactivate = false
         panel.isExcludedFromWindowsMenu = true
         panel.orderFrontRegardless()
         return panel
+    }
+
+    /// Only the island / chin captures clicks — sides stay click-through to menu bar icons.
+    private static func interactiveRect(for viewModel: BoringViewModel, in bounds: NSRect) -> NSRect {
+        let closed = viewModel.closedNotchSize
+        let music = MusicManager.shared
+        var width: CGFloat
+        var height: CGFloat
+
+        if viewModel.notchState == .open {
+            width = max(viewModel.notchSize.width, openNotchSize.width)
+            height = bounds.height
+        } else {
+            width = closed.width
+            // Match BN live-activity chin widening
+            if (music.isPlaying || !music.isPlayerIdle) && BoringViewCoordinator.shared.musicLiveActivityEnabled {
+                width += (2 * max(0, viewModel.effectiveClosedNotchHeight - 12) + 20)
+            }
+            if Defaults[.extendHoverArea] {
+                width += 28
+            }
+            // Only the top strip (notch height + small hover pad) — not the full open window height
+            height = max(closed.height + 14, viewModel.effectiveClosedNotchHeight + 14)
+        }
+
+        width = min(width, bounds.width)
+        height = min(height, bounds.height)
+
+        return NSRect(
+            x: bounds.midX - width / 2,
+            y: bounds.maxY - height,
+            width: width,
+            height: height
+        )
+    }
+
+    private func refreshHitTesting() {
+        // Force AppKit to re-evaluate cursor / hit testing after state changes
+        for (_, hosting) in hostingViews {
+            hosting.needsDisplay = true
+            hosting.window?.invalidateCursorRects(for: hosting)
+        }
     }
 
     private func positionWindow(_ window: NSWindow, on screen: NSScreen, changeAlpha: Bool = false) {
@@ -119,13 +181,18 @@ final class BoringNotchHost {
         )
         window.alphaValue = 1
         window.orderFrontRegardless()
+        refreshHitTesting()
     }
 
     private func cleanupWindows() {
-        windows.values.forEach { $0.close() }
+        windows.values.forEach {
+            hostingViews.removeValue(forKey: ObjectIdentifier($0))
+            $0.close()
+        }
         windows.removeAll()
         viewModels.removeAll()
         if let window {
+            hostingViews.removeValue(forKey: ObjectIdentifier(window))
             window.close()
             self.window = nil
         }
@@ -136,6 +203,7 @@ final class BoringNotchHost {
             let screens = NSScreen.screens
             let uuids = Set(screens.compactMap(\.displayUUID))
             for (uuid, win) in windows where !uuids.contains(uuid) {
+                hostingViews.removeValue(forKey: ObjectIdentifier(win))
                 win.close()
                 windows.removeValue(forKey: uuid)
                 viewModels.removeValue(forKey: uuid)
@@ -155,11 +223,15 @@ final class BoringNotchHost {
                 positionWindow(win, on: screen, changeAlpha: changeAlpha)
             }
             if let window {
+                hostingViews.removeValue(forKey: ObjectIdentifier(window))
                 window.close()
                 self.window = nil
             }
         } else {
-            windows.values.forEach { $0.close() }
+            windows.values.forEach {
+                hostingViews.removeValue(forKey: ObjectIdentifier($0))
+                $0.close()
+            }
             windows.removeAll()
             viewModels.removeAll()
 

@@ -25,9 +25,9 @@ final class FloatingPanel: NSPanel {
         isReleasedWhenClosed = true
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
-        contentMinSize = NSSize(width: 220, height: 180)
-        minSize = NSSize(width: 220, height: 180)
-        maxSize = NSSize(width: 700, height: 800)
+        contentMinSize = NSSize(width: 180, height: 150)
+        minSize = NSSize(width: 180, height: 150)
+        maxSize = NSSize(width: 900, height: 1100)
         self.contentView = contentView
         contentView.autoresizingMask = [.width, .height]
     }

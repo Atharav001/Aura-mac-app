@@ -56,7 +56,7 @@ final class PanelManager: @unchecked Sendable {
         }
 
         let settingsView = SettingsView()
-            .frame(minWidth: 760, idealWidth: 820, maxWidth: .infinity, minHeight: 560, idealHeight: 600, maxHeight: .infinity)
+            .frame(minWidth: 520, idealWidth: 820, maxWidth: .infinity, minHeight: 400, idealHeight: 600, maxHeight: .infinity)
         let hostingView = NSHostingView(rootView: settingsView)
         hostingView.autoresizingMask = [.width, .height]
 
@@ -74,7 +74,9 @@ final class PanelManager: @unchecked Sendable {
         window.hasShadow = true
         window.contentView = hostingView
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 720, height: 540)
+        window.minSize = NSSize(width: 520, height: 400)
+        window.maxSize = NSSize(width: 1400, height: 1200)
+        window.setContentSize(NSSize(width: 820, height: 600))
         window.center()
         window.makeKeyAndOrderFront(nil)
 

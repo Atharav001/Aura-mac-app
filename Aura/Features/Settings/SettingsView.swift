@@ -110,22 +110,21 @@ struct SettingsView: View {
                 .padding(.vertical, 12)
             contentArea
         }
-        .frame(minWidth: 760, minHeight: 580)
+        .frame(minWidth: 520, minHeight: 400)
         .background {
             ZStack {
-                // Soft Cursor-like charcoal base
-                Color(nsColor: NSColor(calibratedWhite: 0.09, alpha: 0.92))
+                // Match Dynamic Island: near-black glass
+                Color.black.opacity(0.82)
                 VisualEffectView(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 0)
-                    .opacity(0.55)
-                // Subtle top-left ambient light (agent chat vibe)
+                    .opacity(0.45)
                 RadialGradient(
                     colors: [
-                        settingsAccent.opacity(0.12),
+                        Color.white.opacity(0.06),
                         Color.clear
                     ],
-                    center: .topLeading,
-                    startRadius: 20,
-                    endRadius: 420
+                    center: .top,
+                    startRadius: 10,
+                    endRadius: 380
                 )
                 .blendMode(.plusLighter)
             }
@@ -171,9 +170,11 @@ struct SettingsView: View {
         }
         .frame(width: 196)
         .background {
-            VisualEffectView(material: .sidebar, blendingMode: .withinWindow, cornerRadius: 0)
-                .opacity(0.35)
-                .overlay(Color.black.opacity(0.18))
+            ZStack {
+                Color.black.opacity(0.35)
+                VisualEffectView(material: .sidebar, blendingMode: .withinWindow, cornerRadius: 0)
+                    .opacity(0.4)
+            }
         }
     }
 

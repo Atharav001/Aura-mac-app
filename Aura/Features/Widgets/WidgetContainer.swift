@@ -13,59 +13,66 @@ struct WidgetContainer<Content: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Custom title chrome (replaces system traffic lights)
-            HStack(spacing: 8) {
-                Button {
-                    guard let panel = panelWindow as? FloatingPanel else { return }
-                    PanelManager.shared.closePanel(id: panel.panelID)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .frame(width: 18, height: 18)
-                        .background(Circle().fill(.white.opacity(0.12)))
-                }
-                .buttonStyle(.plain)
-                .help("Close")
-
-                Spacer()
-
-                Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                        showControls.toggle()
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                // Custom title chrome (replaces system traffic lights)
+                HStack(spacing: 8) {
+                    Button {
+                        guard let panel = panelWindow as? FloatingPanel else { return }
+                        PanelManager.shared.closePanel(id: panel.panelID)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .frame(width: 18, height: 18)
+                            .background(Circle().fill(.white.opacity(0.12)))
                     }
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(showControls ? .white.opacity(0.9) : .white.opacity(0.55))
-                        .frame(width: 22, height: 22)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(showControls ? Color.white.opacity(0.14) : Color.white.opacity(0.06))
-                        )
+                    .buttonStyle(.plain)
+                    .help("Close")
+
+                    Spacer()
+
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showControls.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(showControls ? .white.opacity(0.9) : .white.opacity(0.55))
+                            .frame(width: 22, height: 22)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(showControls ? Color.white.opacity(0.14) : Color.white.opacity(0.06))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Opacity & blur")
                 }
-                .buttonStyle(.plain)
-                .help("Opacity & blur")
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
 
-            content
-                .padding(.horizontal, 16)
-                .padding(.bottom, 14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-            if showControls {
-                Divider()
-                    .overlay(.white.opacity(0.08))
+                content
                     .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .adaptiveWidgetScale(
+                        in: CGSize(width: geo.size.width, height: max(geo.size.height - 40, 1)),
+                        designWidth: 260,
+                        designHeight: 360
+                    )
 
-                controls
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                if showControls {
+                    Divider()
+                        .overlay(.white.opacity(0.08))
+                        .padding(.horizontal, 12)
+
+                    controls
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
         .background(WindowAccessor { window in
