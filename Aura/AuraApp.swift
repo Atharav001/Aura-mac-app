@@ -17,7 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = DataStore.shared
         _ = MenuBarManager.shared
-        NotchManager.shared.setup()
+        // Boring Notch Dynamic Island (vendored from TheBoredTeam/boring.notch)
+        BoringNotchHost.shared.setup()
         FocusManager.shared.setup()
 
         applyStoredAppearance()
