@@ -25,7 +25,9 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
 
     private func configureStatusButton() {
         guard let button = statusItem.button else { return }
-        button.image = MenuBarIconFactory.makeIcon(size: 18)
+        let icon = MenuBarIconFactory.makeIcon(size: 18)
+        icon.isTemplate = true
+        button.image = icon
         button.imagePosition = .imageOnly
         button.imageScaling = .scaleProportionallyDown
         button.toolTip = "Aura"

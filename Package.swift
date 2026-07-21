@@ -44,7 +44,6 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/Logos"),
-                .copy("Resources/Logos/AppIcon.icns"),
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v5)

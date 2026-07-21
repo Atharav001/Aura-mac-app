@@ -87,13 +87,16 @@ enum MenuBarIconFactory {
 
         let bundles: [Bundle] = {
             var list: [Bundle] = [.main]
-            // SPM resource bundle (Aura_Aura.bundle)
-            #if SWIFT_PACKAGE
-            list.append(.module)
-            #endif
+            // Prefer paths under the .app Resources — do not touch Bundle.module here.
+            // Bundle.module fatals when the SPM resource bundle isn't beside a packaged .app.
             if let resourceURL = Bundle.main.resourceURL {
-                let spm = resourceURL.appendingPathComponent("Aura_Aura.bundle")
-                if let b = Bundle(url: spm) { list.append(b) }
+                let nested = [
+                    resourceURL.appendingPathComponent("Aura_Aura.bundle"),
+                    resourceURL.appendingPathComponent("Aura_Aura.bundle").appendingPathComponent("Contents"),
+                ]
+                for url in nested {
+                    if let b = Bundle(url: url) { list.append(b) }
+                }
             }
             return list
         }()
