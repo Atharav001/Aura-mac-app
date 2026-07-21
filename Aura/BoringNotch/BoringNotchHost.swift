@@ -38,6 +38,12 @@ final class BoringNotchHost {
             Defaults[.mediaController] = MusicManager.shared.isNowPlayingDeprecated ? .appleMusic : .spotify
         }
         Defaults[.openNotchOnHover] = true
+        // Calendar on home is on by default / when duo mode is enabled in Aura settings
+        if UserDefaults.standard.object(forKey: "showCalendar") == nil
+            || DataStore.shared.bool(for: .duoModeEnabled, default: true)
+        {
+            Defaults[.showCalendar] = true
+        }
 
         _ = MusicManager.shared
         _ = BatteryStatusViewModel.shared

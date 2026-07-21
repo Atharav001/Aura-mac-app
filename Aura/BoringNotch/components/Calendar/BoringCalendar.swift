@@ -20,6 +20,7 @@ struct Config: Equatable {
 
 struct WheelPicker: View {
     @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject private var calendarManager = CalendarManager.shared
     @Binding var selectedDate: Date
     @State private var scrollPosition: Int?
     @State private var haptics: Bool = false
@@ -54,7 +55,7 @@ struct WheelPicker: View {
                     }
                 }
             }
-            .frame(height: 50)
+            .frame(height: 56)
             .scrollTargetLayout()
         }
         .scrollIndicators(.never)
@@ -109,19 +110,22 @@ struct WheelPicker: View {
     }
 
     private func dateCircle(date: Date, isToday: Bool, isSelected: Bool) -> some View {
-        ZStack {
+        let hasEvents = calendarManager.dayHasEvents(date)
+        return ZStack(alignment: .bottom) {
             Circle()
                 .fill(isToday ? Color.effectiveAccent : .clear)
                 .frame(width: 20, height: 20)
-                .overlay(
-                    Circle()
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 0)
-                )
             Text("\(date.date)")
                 .font(.body)
                 .fontWeight(.medium)
                 .foregroundColor(isSelected ? .white : Color(white: isToday ? 0.9 : 0.65))
+            // Event / task indicator under the day number
+            Circle()
+                .fill(hasEvents ? (isToday || isSelected ? Color.white : Color.red.opacity(0.9)) : Color.clear)
+                .frame(width: 4, height: 4)
+                .offset(y: 14)
         }
+        .frame(height: 28)
     }
 
     func handleScrollChange(newValue: Int?, config: Config) {
@@ -182,23 +186,26 @@ struct CalendarView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject private var calendarManager = CalendarManager.shared
     @State private var selectedDate = Date()
+    /// Day window for the scrollable week strip. Default: current 7 days (3 past + today + 3 future).
+    var config: Config = Config(past: 3, future: 3, offset: 2)
+    var compact: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading) {
                     Text(selectedDate.formatted(.dateTime.month(.abbreviated)))
-                        .font(.title3)
+                        .font(compact ? .callout : .title3)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
                     Text(selectedDate.formatted(.dateTime.year()))
-                        .font(.title3)
+                        .font(compact ? .caption : .title3)
                         .fontWeight(.light)
                         .foregroundColor(Color(white: 0.65))
                 }
 
                 ZStack(alignment: .top) {
-                    WheelPicker(selectedDate: $selectedDate, config: Config())
+                    WheelPicker(selectedDate: $selectedDate, config: config)
                     HStack(alignment: .top) {
                         LinearGradient(
                             colors: [Color.black, .clear], startPoint: .leading, endPoint: .trailing
@@ -224,7 +231,7 @@ struct CalendarView: View {
             }
         }
         .listRowBackground(Color.clear)
-        .frame(height: 120)
+        .frame(height: compact ? 120 : 150)
         .onChange(of: selectedDate) {
             Task {
                 await calendarManager.updateCurrentDate(selectedDate)
@@ -233,15 +240,160 @@ struct CalendarView: View {
         .onChange(of: vm.notchState) { _, _ in
             Task {
                 await calendarManager.updateCurrentDate(Date.now)
+                await calendarManager.refreshEventIndicators(past: config.past, future: config.future)
                 selectedDate = Date.now
             }
         }
         .onAppear {
             Task {
                 await calendarManager.updateCurrentDate(Date.now)
+                await calendarManager.refreshEventIndicators(past: config.past, future: config.future)
                 selectedDate = Date.now
             }
         }
+    }
+}
+
+/// Full-width calendar section used by the Calendar tab.
+struct CalendarTabView: View {
+    @EnvironmentObject var vm: BoringViewModel
+
+    var body: some View {
+        CalendarView(config: Config(past: 3, future: 3, offset: 2), compact: false)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 4)
+            .onHover { hovering in
+                vm.isHoveringCalendar = hovering
+            }
+    }
+}
+
+/// Compact 4-day strip for the home screen (yesterday → day after tomorrow) with event dots.
+struct HomeCalendarStrip: View {
+    @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject private var calendarManager = CalendarManager.shared
+    @State private var selectedDate = Date()
+
+    private var days: [Date] {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        return (-1...2).compactMap { cal.date(byAdding: .day, value: $0, to: today) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 6) {
+                Text(selectedDate.formatted(.dateTime.month(.abbreviated)))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, alignment: .leading)
+
+                HStack(spacing: 2) {
+                    ForEach(days, id: \.self) { date in
+                        dayCell(date)
+                    }
+                }
+            }
+
+            let list = EventListView.filteredEvents(events: calendarManager.events)
+            if list.isEmpty {
+                Spacer(minLength: 2)
+                VStack(spacing: 4) {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.system(size: 16, weight: .light))
+                        .foregroundStyle(.white.opacity(0.35))
+                    Text(Calendar.current.isDateInToday(selectedDate) ? "No events today" : "No events")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                .frame(maxWidth: .infinity)
+                Spacer(minLength: 0)
+            } else {
+                EventListView(events: calendarManager.events)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onHover { hovering in
+            vm.isHoveringCalendar = hovering
+        }
+        .onAppear {
+            Task {
+                selectedDate = Date()
+                await calendarManager.updateCurrentDate(selectedDate)
+                await calendarManager.refreshEventIndicators(past: 2, future: 3)
+            }
+        }
+        .onChange(of: selectedDate) { _, newValue in
+            Task {
+                await calendarManager.updateCurrentDate(newValue)
+            }
+        }
+        .onChange(of: vm.notchState) { _, state in
+            if state == .open {
+                Task {
+                    selectedDate = Date()
+                    await calendarManager.updateCurrentDate(selectedDate)
+                    await calendarManager.refreshEventIndicators(past: 2, future: 3)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dayCell(_ date: Date) -> some View {
+        let cal = Calendar.current
+        let isToday = cal.isDateInToday(date)
+        let isSelected = cal.isDate(date, inSameDayAs: selectedDate)
+        let hasEvents = calendarManager.dayHasEvents(date)
+        let day = cal.component(.day, from: date)
+        let weekdayIndex = cal.component(.weekday, from: date) - 1
+        let symbols = Calendar.current.veryShortWeekdaySymbols
+
+        Button {
+            withAnimation(.smooth(duration: 0.2)) {
+                selectedDate = date
+            }
+        } label: {
+            VStack(spacing: 2) {
+                Text(String(symbols[weekdayIndex].prefix(2)))
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(isToday || isSelected ? Color.white : Color.white.opacity(0.4))
+                Text("\(day)")
+                    .font(.system(size: 11, weight: isToday ? .bold : .semibold))
+                    .foregroundStyle(isToday ? Color.white : Color.white.opacity(0.7))
+                // Dots: up to 3 colored marks for scheduled events/tasks
+                HStack(spacing: 2) {
+                    let colors = eventColors(for: date)
+                    if colors.isEmpty {
+                        Circle().fill(Color.clear).frame(width: 3, height: 3)
+                    } else {
+                        ForEach(Array(colors.prefix(3).enumerated()), id: \.offset) { _, color in
+                            Circle()
+                                .fill(color)
+                                .frame(width: 3.5, height: 3.5)
+                        }
+                    }
+                }
+                .frame(height: 4)
+                .opacity(hasEvents ? 1 : 0)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(
+                        isSelected
+                            ? Color.effectiveAccent.opacity(0.85)
+                            : (isToday ? Color.white.opacity(0.08) : Color.clear)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .help(hasEvents ? "View events" : "No events")
+    }
+
+    private func eventColors(for date: Date) -> [Color] {
+        calendarManager.events(on: date).prefix(3).map { Color($0.calendar.color) }
     }
 }
 

@@ -440,29 +440,36 @@ struct NotchHomeView: View {
     }
 
     private var mainContent: some View {
-        HStack(alignment: .top, spacing: (shouldShowCamera && Defaults[.showCalendar]) ? 10 : 15) {
-            MusicPlayerView(albumArtNamespace: albumArtNamespace)
+        GeometryReader { geo in
+            let showCal = Defaults[.showCalendar]
+            let musicWidth = showCal ? geo.size.width * 0.60 : geo.size.width
+            let calendarWidth = showCal ? geo.size.width * 0.40 : 0
 
-            if Defaults[.showCalendar] {
-                CalendarView()
-                    .frame(width: shouldShowCamera ? 170 : 215)
-                    .onHover { isHovering in
-                        vm.isHoveringCalendar = isHovering
-                    }
-                    .environmentObject(vm)
-                    .transition(.opacity)
-            }
+            HStack(alignment: .top, spacing: (shouldShowCamera && showCal) ? 8 : 12) {
+                MusicPlayerView(albumArtNamespace: albumArtNamespace)
+                    .frame(width: max(0, musicWidth - (shouldShowCamera ? 90 : 0)))
 
-            if shouldShowCamera {
-                CameraPreviewView(webcamManager: webcamManager)
-                    .scaledToFit()
-                    .opacity(vm.notchState == .closed ? 0 : 1)
-                    .blur(radius: vm.notchState == .closed ? 20 : 0)
-                    .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.76, blendDuration: 0), value: shouldShowCamera)
+                if showCal {
+                    HomeCalendarStrip()
+                        .frame(width: max(120, calendarWidth - (shouldShowCamera ? 10 : 0)))
+                        .environmentObject(vm)
+                        .transition(.opacity)
+                }
+
+                if shouldShowCamera {
+                    CameraPreviewView(webcamManager: webcamManager)
+                        .frame(width: 80)
+                        .scaledToFit()
+                        .opacity(vm.notchState == .closed ? 0 : 1)
+                        .blur(radius: vm.notchState == .closed ? 20 : 0)
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
         }
+        .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 150)
         .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)), removal: .opacity))
         .blur(radius: vm.notchState == .closed ? 30 : 0)
+        .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.76, blendDuration: 0), value: shouldShowCamera)
     }
 }
 

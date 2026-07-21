@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Defaults
 
 private let settingsAccent = Color(red: 0.35, green: 0.58, blue: 1.0) // Cursor-like soft blue
 private let settingsTextPrimary = Color.white.opacity(0.92)
@@ -32,7 +33,7 @@ struct SettingsView: View {
     @State private var coloredSpectrograms = DataStore.shared.bool(for: .coloredSpectrograms, default: true)
 
     // Display / Appearance
-    @State private var duoModeEnabled = DataStore.shared.bool(for: .duoModeEnabled, default: true)
+    @State private var duoModeEnabled = Defaults[.showCalendar]
     @State private var notchWidth: Double = DataStore.shared.double(for: .notchWidth, default: 620)
     @State private var simulatedNotch = DataStore.shared.bool(for: .simulatedNotch, default: false)
     @State private var duoModeSplit: Double = DataStore.shared.double(for: .duoModeSplit, default: 60)
@@ -65,7 +66,7 @@ struct SettingsView: View {
     @State private var clipboardHistorySize: Double = DataStore.shared.double(for: .clipboardHistorySize, default: 48)
 
     // Calendar / Battery
-    @State private var hideAllDayEvents = DataStore.shared.bool(for: .hideAllDayEvents, default: false)
+    @State private var hideAllDayEvents = Defaults[.hideAllDayEvents]
     @State private var calendarTitleTruncation = DataStore.shared.bool(for: .calendarTitleTruncation, default: true)
     @State private var showBatteryInNotch = DataStore.shared.bool(for: .showBatteryInNotch, default: true)
     @State private var showBatteryPercentage = DataStore.shared.bool(for: .showBatteryPercentage, default: true)
@@ -467,6 +468,7 @@ struct SettingsView: View {
                     dividerRow
                     toggleRow("Duo mode (media + calendar)", value: $duoModeEnabled) {
                         DataStore.shared.set(key: .duoModeEnabled, value: $0)
+                        Defaults[.showCalendar] = $0
                         notifySettings()
                     }
                     if duoModeEnabled {
@@ -596,14 +598,23 @@ struct SettingsView: View {
                 }
 
                 settingsCard("Calendar") {
+                    toggleRow("Show calendar on home", value: $duoModeEnabled) {
+                        DataStore.shared.set(key: .duoModeEnabled, value: $0)
+                        Defaults[.showCalendar] = $0
+                        notifySettings()
+                    }
+                    dividerRow
                     toggleRow("Hide all-day events", value: $hideAllDayEvents) {
                         DataStore.shared.set(key: .hideAllDayEvents, value: $0)
+                        Defaults[.hideAllDayEvents] = $0
+                        Task { await CalendarManager.shared.refreshEventIndicators(past: 7, future: 14) }
                     }
                     dividerRow
                     toggleRow("Truncate long titles", value: $calendarTitleTruncation) {
                         DataStore.shared.set(key: .calendarTitleTruncation, value: $0)
+                        Defaults[.showFullEventTitles] = !$0
                     }
-                    Text("Pulls the current week and events from the Mac Calendar app.")
+                    Text("Home shows music (60%) plus yesterday → next day with event dots. The Calendar tab scrolls the current 7 days.")
                         .font(.system(size: 10))
                         .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)

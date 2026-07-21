@@ -345,6 +345,8 @@ struct ContentView: View {
                     switch coordinator.currentView {
                     case .home:
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
+                    case .calendar:
+                        CalendarTabView()
                     case .shelf:
                         ShelfView()
                     }
