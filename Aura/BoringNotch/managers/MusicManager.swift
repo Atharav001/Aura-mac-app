@@ -27,6 +27,12 @@ class MusicManager: ObservableObject {
 
     // Active controller
     private var activeController: (any MediaControllerProtocol)?
+    /// Parallel monitors so we can follow whichever of Spotify / Apple Music is actually playing.
+    private var spotifyMonitor: (any MediaControllerProtocol)?
+    private var appleMusicMonitor: (any MediaControllerProtocol)?
+    private var lastSpotifyState: PlaybackState?
+    private var lastAppleMusicState: PlaybackState?
+    private var activeSourceType: MediaControllerType?
 
     // Published properties for UI
     @Published var songTitle: String = "I'm Handsome"
@@ -103,8 +109,12 @@ class MusicManager: ObservableObject {
         flipWorkItem?.cancel()
         transitionWorkItem?.cancel()
 
-        // Release active controller
         activeController = nil
+        spotifyMonitor = nil
+        appleMusicMonitor = nil
+        lastSpotifyState = nil
+        lastAppleMusicState = nil
+        activeSourceType = nil
     }
 
     // MARK: - Setup Methods
@@ -153,16 +163,107 @@ class MusicManager: ObservableObject {
         let preferredType = Defaults[.mediaController]
         print("Preferred Media Controller: \(preferredType)")
 
-        // If NowPlaying is deprecated but that's the preference, use Apple Music instead
-        let controllerType = (self.isNowPlayingDeprecated && preferredType == .nowPlaying)
-            ? .appleMusic
-            : preferredType
+        // System Now Playing already routes to the active app — use it when available
+        if preferredType == .nowPlaying, !self.isNowPlayingDeprecated {
+            controllerCancellables.removeAll()
+            spotifyMonitor = nil
+            appleMusicMonitor = nil
+            lastSpotifyState = nil
+            lastAppleMusicState = nil
+            if let controller = createController(for: .nowPlaying) {
+                setActiveController(controller)
+                activeSourceType = .nowPlaying
+            }
+            return
+        }
 
-        if let controller = createController(for: controllerType) {
-            setActiveController(controller)
-        } else if controllerType != .appleMusic, let fallbackController = createController(for: .appleMusic) {
-            // Fallback to Apple Music if preferred controller couldn't be created
-            setActiveController(fallbackController)
+        // Smart dual source: always watch Spotify + Apple Music and surface whoever is playing
+        // (matches Boring Notch behavior of showing the live player, not a stuck paused Spotify).
+        startSmartMediaMonitors(preferredFallback: preferredType == .appleMusic ? .appleMusic : .spotify)
+    }
+
+    /// Keeps Spotify and Apple Music controllers alive and picks the playing one for the island UI.
+    private func startSmartMediaMonitors(preferredFallback: MediaControllerType) {
+        controllerCancellables.removeAll()
+
+        let spotify = SpotifyController()
+        let apple = AppleMusicController()
+        spotifyMonitor = spotify
+        appleMusicMonitor = apple
+
+        spotify.playbackStatePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                self.lastSpotifyState = state
+                self.reconcilePlayingSource(preferredFallback: preferredFallback)
+            }
+            .store(in: &controllerCancellables)
+
+        apple.playbackStatePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                self.lastAppleMusicState = state
+                self.reconcilePlayingSource(preferredFallback: preferredFallback)
+            }
+            .store(in: &controllerCancellables)
+
+        // Seed active controller
+        reconcilePlayingSource(preferredFallback: preferredFallback)
+        Task {
+            await spotify.updatePlaybackInfo()
+            await apple.updatePlaybackInfo()
+        }
+    }
+
+    @MainActor
+    private func reconcilePlayingSource(preferredFallback: MediaControllerType) {
+        let spotifyPlaying = lastSpotifyState?.isPlaying == true
+        let applePlaying = lastAppleMusicState?.isPlaying == true
+
+        // Prefer whichever player is actively playing. If Spotify is paused and Apple Music
+        // is playing, Apple Music wins (and vice versa) — same idea as Boring Notch / Now Playing.
+        let resolved: MediaControllerType
+        if applePlaying && !spotifyPlaying {
+            resolved = .appleMusic
+        } else if spotifyPlaying && !applePlaying {
+            resolved = .spotify
+        } else if applePlaying && spotifyPlaying {
+            let sTime = lastSpotifyState?.lastUpdated ?? .distantPast
+            let aTime = lastAppleMusicState?.lastUpdated ?? .distantPast
+            resolved = aTime >= sTime ? .appleMusic : .spotify
+        } else if let current = activeSourceType, current == .spotify || current == .appleMusic {
+            resolved = current
+        } else {
+            resolved = preferredFallback
+        }
+
+        let controller: (any MediaControllerProtocol)? = {
+            switch resolved {
+            case .appleMusic: return appleMusicMonitor
+            case .spotify: return spotifyMonitor
+            default: return spotifyMonitor
+            }
+        }()
+
+        let state: PlaybackState? = {
+            switch resolved {
+            case .appleMusic: return lastAppleMusicState
+            case .spotify: return lastSpotifyState
+            default: return lastSpotifyState
+            }
+        }()
+
+        if let controller, activeController !== controller || activeSourceType != resolved {
+            activeController = controller
+            activeSourceType = resolved
+            canFavoriteTrack = controller.supportsFavorite
+            volumeControlSupported = controller.supportsVolumeControl
+        }
+
+        if let state {
+            updateFromPlaybackState(state)
         }
     }
 

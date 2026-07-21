@@ -44,6 +44,7 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/Logos"),
+                .copy("Resources/Sounds"),
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v5)

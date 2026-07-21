@@ -92,6 +92,7 @@ final class PomodoroViewModel {
     func stopAlarm() {
         alarmPlayer?.stop()
         alarmPlayer = nil
+        TimerAlertService.shared.stop()
         isAlarmPlaying = false
     }
 
@@ -178,6 +179,10 @@ final class PomodoroViewModel {
             self.startDate = nil
             let completedPhase = phase
             playAlarm()
+            TimerAlertService.shared.announceTimerComplete(
+                source: "pomodoro",
+                playSound: alarmURL == nil
+            )
             onComplete?(completedPhase)
             NotificationCenter.default.post(name: .pomodoroComplete, object: completedPhase.rawValue)
             sendNotification(for: completedPhase)
@@ -216,11 +221,15 @@ final class PomodoroViewModel {
     private func playAlarm() {
         if let url = alarmURL {
             alarmPlayer = try? AVAudioPlayer(contentsOf: url)
-            alarmPlayer?.numberOfLoops = -1
+            alarmPlayer?.numberOfLoops = 1
             alarmPlayer?.play()
             isAlarmPlaying = true
         } else {
-            NSSound.beep()
+            // Global preset is played by announceTimerComplete
+            isAlarmPlaying = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                self?.isAlarmPlaying = false
+            }
         }
     }
 

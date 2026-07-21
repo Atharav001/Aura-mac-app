@@ -14,6 +14,10 @@ struct AuraApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = DataStore.shared
         _ = MenuBarManager.shared

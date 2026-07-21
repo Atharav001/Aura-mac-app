@@ -121,7 +121,9 @@ final class StopwatchViewModel {
             alarmPlayer = try? AVAudioPlayer(contentsOf: url)
             alarmPlayer?.play()
         } else {
-            NSSound.beep()
+            Task { @MainActor in
+                TimerAlertService.shared.playSelectedAlert(loop: false)
+            }
         }
     }
 
@@ -130,6 +132,9 @@ final class StopwatchViewModel {
     func stopAlarm() {
         alarmPlayer?.stop()
         alarmPlayer = nil
+        Task { @MainActor in
+            TimerAlertService.shared.stop()
+        }
     }
 
     private func startTimer() {
@@ -153,7 +158,14 @@ final class StopwatchViewModel {
             elapsed = nowElapsed
             if timeRemaining <= 0 {
                 stop()
+                let hasCustom = alarmURL != nil
                 playAlarm()
+                Task { @MainActor in
+                    TimerAlertService.shared.announceTimerComplete(
+                        source: "stopwatch",
+                        playSound: !hasCustom
+                    )
+                }
             }
         }
     }

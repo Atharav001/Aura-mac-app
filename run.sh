@@ -20,6 +20,11 @@ if [ -d "Aura/Resources/Logos" ]; then
   # Skip intermediate iconset folders if present
   find Aura/Resources/Logos -maxdepth 1 -type f -exec cp {} "${BUNDLE}/Contents/Resources/Logos/" \;
 fi
+# Timer alert sounds
+mkdir -p "${BUNDLE}/Contents/Resources/Sounds"
+if [ -d "Aura/Resources/Sounds" ]; then
+  find Aura/Resources/Sounds -maxdepth 1 -type f -exec cp {} "${BUNDLE}/Contents/Resources/Sounds/" \;
+fi
 # Dock icon must live at Contents/Resources/AppIcon.icns for CFBundleIconFile
 if [ -f "Aura/Resources/Logos/AppIcon.icns" ]; then
   cp "Aura/Resources/Logos/AppIcon.icns" "${BUNDLE}/Contents/Resources/AppIcon.icns"

@@ -5,6 +5,7 @@ struct WidgetContainer<Content: View>: View {
     @State private var viewModel = WidgetState()
     @State private var panelWindow: NSWindow?
     @State private var showControls = false
+    @State private var showTimerAttention = false
 
     let content: Content
 
@@ -75,6 +76,9 @@ struct WidgetContainer<Content: View>: View {
                 }
             }
         }
+        .overlay {
+            TimerAttentionOverlay(isActive: $showTimerAttention)
+        }
         .background(WindowAccessor { window in
             panelWindow = window
             window?.alphaValue = viewModel.opacity
@@ -89,6 +93,27 @@ struct WidgetContainer<Content: View>: View {
             cornerRadius: 18
         )
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onReceive(NotificationCenter.default.publisher(for: TimerAlertService.timerAttentionNotification)) { _ in
+            // Bring widget forward and run visual attention even if muted
+            if let window = panelWindow {
+                window.alphaValue = max(viewModel.opacity, 0.92)
+                window.orderFrontRegardless()
+                if let panel = window as? FloatingPanel {
+                    panel.setAlwaysOnTop(true)
+                }
+                // Subtle window shake via frame nudge
+                let frame = window.frame
+                window.setFrame(frame.offsetBy(dx: 6, dy: 0), display: true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                    window.setFrame(frame.offsetBy(dx: -5, dy: 0), display: true)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    window.setFrame(frame, display: true)
+                    window.alphaValue = viewModel.opacity
+                }
+            }
+            showTimerAttention = true
+        }
         .onChange(of: viewModel.isPinned) { _, isPinned in
             if let panel = panelWindow as? FloatingPanel {
                 panel.level = isPinned ? .statusBar : .floating

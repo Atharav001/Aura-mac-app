@@ -76,6 +76,7 @@ struct SettingsView: View {
     @State private var shortBreakDuration = Int(DataStore.shared.double(for: .pomodoroShortBreakDuration, default: 5))
     @State private var longBreakDuration = Int(DataStore.shared.double(for: .pomodoroLongBreakDuration, default: 15))
     @State private var cyclesBeforeLongBreak = Int(DataStore.shared.double(for: .pomodoroCyclesBeforeLongBreak, default: 4))
+    @State private var timerAlertSoundID = DataStore.shared.string(for: .timerAlertSoundID) ?? "glass"
     @State private var defaultOpacity = DataStore.shared.double(for: .defaultOpacity, default: 1.0)
     @State private var defaultBlur = DataStore.shared.double(for: .defaultBlur, default: 0.55)
     @State private var defaultPin = DataStore.shared.bool(for: .defaultPin, default: true)
@@ -505,7 +506,7 @@ struct SettingsView: View {
                         isConnected: $appleMusicConnected,
                         onToggle: { MediaTracker.shared.setAppleMusicConnected($0) }
                     )
-                    Text("Turn either (or both) on. Whatever is playing shows art, title, duration, and controls in the island.")
+                    Text("Turn either (or both) on. The island follows whichever app is actually playing — if Spotify is paused and Apple Music is playing, Apple Music is shown (and the reverse).")
                         .font(.system(size: 10))
                         .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)
@@ -668,6 +669,89 @@ struct SettingsView: View {
                         DataStore.shared.set(key: .pomodoroCyclesBeforeLongBreak, value: Double($0))
                     }
                     Text("Focus and breaks loop automatically. Click the timer digits to type a custom length.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(settingsTextSecondary)
+                        .padding(.top, 8)
+                }
+
+                settingsCard("Timer alert sound") {
+                    ForEach(TimerAlertService.presets) { preset in
+                        HStack(spacing: 10) {
+                            Button {
+                                timerAlertSoundID = preset.id
+                                TimerAlertService.shared.selectedPresetID = preset.id
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: timerAlertSoundID == preset.id ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(timerAlertSoundID == preset.id ? settingsAccent : settingsTextTertiary)
+                                    Text(preset.displayName)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(settingsTextPrimary)
+                                    Spacer()
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                TimerAlertService.shared.preview(presetID: preset.id)
+                            } label: {
+                                Image(systemName: "play.circle")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(settingsTextSecondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Preview")
+                        }
+                        if preset.id != TimerAlertService.presets.last?.id {
+                            dividerRow
+                        }
+                    }
+                    dividerRow
+                    HStack(spacing: 10) {
+                        Button {
+                            timerAlertSoundID = TimerAlertService.customPresetID
+                            TimerAlertService.shared.selectedPresetID = TimerAlertService.customPresetID
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: timerAlertSoundID == TimerAlertService.customPresetID ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(timerAlertSoundID == TimerAlertService.customPresetID ? settingsAccent : settingsTextTertiary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Custom MP3")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(settingsTextPrimary)
+                                    Text(TimerAlertService.shared.customSoundURL?.lastPathComponent ?? "Add your own short alert")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(settingsTextSecondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            if TimerAlertService.shared.pickCustomMP3() != nil {
+                                timerAlertSoundID = TimerAlertService.customPresetID
+                            }
+                        } label: {
+                            Text("Choose…")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(settingsAccent)
+                        }
+                        .buttonStyle(.plain)
+
+                        if TimerAlertService.shared.customSoundURL != nil {
+                            Button {
+                                TimerAlertService.shared.preview(presetID: TimerAlertService.customPresetID)
+                            } label: {
+                                Image(systemName: "play.circle")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(settingsTextSecondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    Text("Plays at the end of every Pomodoro phase and countdown. A visual pulse also flashes on the open timer window.")
                         .font(.system(size: 10))
                         .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)

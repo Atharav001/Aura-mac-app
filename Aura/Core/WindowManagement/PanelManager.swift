@@ -93,10 +93,6 @@ final class PanelManager: @unchecked Sendable {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.settingsWindow = nil
-                let dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
-                if !dockVisible && (self?.panels.isEmpty == true) {
-                    NSApp.setActivationPolicy(.accessory)
-                }
             }
         }
 

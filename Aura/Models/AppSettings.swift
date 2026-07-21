@@ -106,6 +106,8 @@ extension DataStore {
         case pomodoroShortBreakDuration = "pomodoro.shortBreakDuration"
         case pomodoroLongBreakDuration = "pomodoro.longBreakDuration"
         case pomodoroCyclesBeforeLongBreak = "pomodoro.cyclesBeforeLongBreak"
+        case timerAlertSoundID = "timer.alertSoundID"
+        case timerAlertCustomPath = "timer.alertCustomPath"
 
         // Shelf (drop zone)
         case shelfEnabled = "shelf.enabled"

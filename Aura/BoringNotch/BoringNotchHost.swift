@@ -34,8 +34,11 @@ final class BoringNotchHost {
         BoringViewCoordinator.shared.showWhatsNew = false
         BoringViewCoordinator.shared.helloAnimationRunning = false
 
-        if Defaults[.mediaController] == .nowPlaying {
-            Defaults[.mediaController] = MusicManager.shared.isNowPlayingDeprecated ? .appleMusic : .spotify
+        // Prefer system Now Playing when available; otherwise smart Spotify ↔ Apple Music switching
+        if Defaults[.mediaController] == .nowPlaying,
+           MusicManager.shared.isNowPlayingDeprecated
+        {
+            Defaults[.mediaController] = .spotify
         }
         Defaults[.openNotchOnHover] = true
         // Calendar on home is on by default / when duo mode is enabled in Aura settings
