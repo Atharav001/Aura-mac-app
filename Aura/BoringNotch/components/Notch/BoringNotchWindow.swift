@@ -38,9 +38,10 @@ class BoringNotchWindow: NSPanel {
             .ignoresCycle,
         ]
 
-        // Above menu bar so hover over the hardware notch works
-        level = .statusBar
-        ignoresMouseEvents = false
+        // Stay above desktop content but do not needlessly fight the menu bar:
+        // closed window is only as wide as the hardware notch (see BoringNotchHost).
+        level = .popUpMenu + 1
+        ignoresMouseEvents = true
         acceptsMouseMovedEvents = true
         hidesOnDeactivate = false
     }

@@ -111,6 +111,12 @@ struct SettingsView: View {
             contentArea
         }
         .frame(minWidth: 520, minHeight: 400)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            // Explicit drag strip — transparent titlebars need a movable region
+            Color.clear
+                .frame(height: 12)
+                .background(WindowDragHandle())
+        }
         .background {
             ZStack {
                 // Match Dynamic Island: near-black glass

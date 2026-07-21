@@ -68,10 +68,12 @@ final class PanelManager: @unchecked Sendable {
         )
         window.title = "Aura Settings"
         window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
+        window.titleVisibility = .visible
         window.isOpaque = false
-        window.backgroundColor = .clear
+        window.backgroundColor = NSColor.black.withAlphaComponent(0.001)
         window.hasShadow = true
+        window.isMovable = true
+        window.isMovableByWindowBackground = true
         window.contentView = hostingView
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 520, height: 400)

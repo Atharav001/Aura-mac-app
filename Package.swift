@@ -42,8 +42,10 @@ let package = Package(
                 "BoringNotch/extensions/KeyboardShortcutsHelper.swift",
                 "BoringNotch/menu/StatusBarMenu.swift",
             ],
+            resources: [
+                .copy("Resources/Logos")
+            ],
             swiftSettings: [
-                // Boring Notch sources target Swift 5 concurrency; keep Aura widgets compiling too
                 .swiftLanguageMode(.v5)
             ]
         ),
