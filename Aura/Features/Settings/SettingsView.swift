@@ -1,13 +1,14 @@
 import SwiftUI
 import AppKit
 
-private let settingsSidebarBG = Color(nsColor: NSColor(red: 0.118, green: 0.118, blue: 0.118, alpha: 1))
-private let settingsContentBG = Color(nsColor: NSColor(red: 0.145, green: 0.145, blue: 0.145, alpha: 1))
-private let settingsCardBG = Color(nsColor: NSColor(red: 0.173, green: 0.173, blue: 0.173, alpha: 1))
-private let settingsBorder = Color.white.opacity(0.06)
-private let settingsCyan = Color(red: 0.196, green: 0.678, blue: 0.902)
-private let settingsBlue = Color(red: 0, green: 0.478, blue: 1)
-private let settingsSecondaryText = Color(red: 0.6, green: 0.6, blue: 0.6)
+private let settingsAccent = Color(red: 0.35, green: 0.58, blue: 1.0) // Cursor-like soft blue
+private let settingsTextPrimary = Color.white.opacity(0.92)
+private let settingsTextSecondary = Color.white.opacity(0.48)
+private let settingsTextTertiary = Color.white.opacity(0.32)
+private let settingsHairline = Color.white.opacity(0.08)
+private let settingsCardFill = Color.white.opacity(0.045)
+private let settingsCardStroke = Color.white.opacity(0.08)
+private let settingsRowHover = Color.white.opacity(0.06)
 
 struct SettingsView: View {
     @State private var selectedSection: Section = .general
@@ -103,62 +104,110 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar
-            Rectangle().fill(settingsBorder).frame(width: 1)
+            Rectangle()
+                .fill(settingsHairline)
+                .frame(width: 1)
+                .padding(.vertical, 12)
             contentArea
         }
-        .frame(minWidth: 720, minHeight: 560)
-        .background(settingsContentBG)
+        .frame(minWidth: 760, minHeight: 580)
+        .background {
+            ZStack {
+                // Soft Cursor-like charcoal base
+                Color(nsColor: NSColor(calibratedWhite: 0.09, alpha: 0.92))
+                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow, cornerRadius: 0)
+                    .opacity(0.55)
+                // Subtle top-left ambient light (agent chat vibe)
+                RadialGradient(
+                    colors: [
+                        settingsAccent.opacity(0.12),
+                        Color.clear
+                    ],
+                    center: .topLeading,
+                    startRadius: 20,
+                    endRadius: 420
+                )
+                .blendMode(.plusLighter)
+            }
+            .ignoresSafeArea()
+        }
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Aura")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.top, 24)
-                .padding(.bottom, 20)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(settingsAccent.opacity(0.18))
+                        .frame(width: 28, height: 28)
+                    Image(nsImage: MenuBarIconFactory.makeIcon(size: 14))
+                        .renderingMode(.template)
+                        .foregroundStyle(settingsAccent)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Aura")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(settingsTextPrimary)
+                    Text("Settings")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(settingsTextTertiary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 18)
 
             ForEach(Section.allCases, id: \.self) { section in
                 sidebarItem(section)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
+
             Text("v1.0.0")
-                .font(.system(size: 10))
-                .foregroundColor(settingsSecondaryText)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(settingsTextTertiary)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 16)
         }
-        .frame(width: 180)
-        .background(settingsSidebarBG)
+        .frame(width: 196)
+        .background {
+            VisualEffectView(material: .sidebar, blendingMode: .withinWindow, cornerRadius: 0)
+                .opacity(0.35)
+                .overlay(Color.black.opacity(0.18))
+        }
     }
 
     private func sidebarItem(_ section: Section) -> some View {
         let isSelected = selectedSection == section
         let isHovered = hoveredSection == section
         return Button {
-            selectedSection = section
+            withAnimation(.easeOut(duration: 0.15)) {
+                selectedSection = section
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: section.icon)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(isSelected ? settingsBlue : settingsCyan)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isSelected ? settingsAccent : settingsTextSecondary)
                     .frame(width: 20)
                 Text(section.rawValue)
-                    .font(.system(size: 12, weight: isSelected ? .medium : .regular))
-                    .foregroundColor(isSelected ? .white : settingsSecondaryText)
-                Spacer()
+                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? settingsTextPrimary : settingsTextSecondary)
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? settingsBlue.opacity(0.15) : (isHovered ? Color.white.opacity(0.05) : Color.clear))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? settingsAccent.opacity(0.14) : (isHovered ? settingsRowHover : Color.clear))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isSelected ? settingsAccent.opacity(0.25) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .onHover { hovering in hoveredSection = hovering ? section : nil }
     }
 
@@ -175,7 +224,8 @@ struct SettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(settingsContentBG)
+        .padding(.top, 28) // clear transparent titlebar / traffic lights
+        .background(Color.clear)
     }
 
     // MARK: - General
@@ -244,7 +294,7 @@ struct SettingsView: View {
                     }
                     dividerRow
                     HStack {
-                        Text("Middle click").foregroundColor(.white).font(.system(size: 12))
+                        Text("Middle click").foregroundStyle(settingsTextPrimary).font(.system(size: 12))
                         Spacer()
                         Picker("", selection: $middleClickAction) {
                             Text("Cycle notch").tag("Cycle states")
@@ -291,7 +341,7 @@ struct SettingsView: View {
 
                 settingsCard("Theme") {
                     HStack {
-                        Text("Appearance").foregroundColor(.white).font(.system(size: 12))
+                        Text("Appearance").foregroundStyle(settingsTextPrimary).font(.system(size: 13))
                         Spacer()
                         Picker("", selection: $appearanceMode) {
                             Text("Dark").tag("dark")
@@ -312,7 +362,7 @@ struct SettingsView: View {
                     }
                     dividerRow
                     HStack {
-                        Text("Glass style").foregroundColor(.white).font(.system(size: 12))
+                        Text("Glass style").foregroundStyle(settingsTextPrimary).font(.system(size: 12))
                         Spacer()
                         Picker("", selection: $glassVariant) {
                             Text("iOS").tag("ios")
@@ -331,7 +381,7 @@ struct SettingsView: View {
 
                 settingsCard("Notch shape") {
                     HStack {
-                        Text("Style").foregroundColor(.white).font(.system(size: 12))
+                        Text("Style").foregroundStyle(settingsTextPrimary).font(.system(size: 12))
                         Spacer()
                         Picker("", selection: $notchStyle) {
                             Text("Melted").tag("melted")
@@ -350,7 +400,7 @@ struct SettingsView: View {
                     }
                     dividerRow
                     HStack {
-                        Text("Notch height").foregroundColor(.white).font(.system(size: 12))
+                        Text("Notch height").foregroundStyle(settingsTextPrimary).font(.system(size: 12))
                         Spacer()
                         Picker("", selection: $notchHeightOption) {
                             Text("Match real notch").tag("Match real notch size")
@@ -447,7 +497,7 @@ struct SettingsView: View {
                     )
                     Text("Turn either (or both) on. Whatever is playing shows art, title, duration, and controls in the island.")
                         .font(.system(size: 10))
-                        .foregroundColor(settingsSecondaryText)
+                        .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)
                 }
 
@@ -468,7 +518,7 @@ struct SettingsView: View {
                     }
                     dividerRow
                     HStack {
-                        Text("Skip amount").foregroundColor(.white).font(.system(size: 12))
+                        Text("Skip amount").foregroundStyle(settingsTextPrimary).font(.system(size: 12))
                         Spacer()
                         Picker("", selection: $skipIncrement) {
                             Text("5s").tag("5s")
@@ -519,7 +569,7 @@ struct SettingsView: View {
                     }
                     Text("Drag files onto the notch — Shelf opens automatically so you can stage and move them between folders.")
                         .font(.system(size: 10))
-                        .foregroundColor(settingsSecondaryText)
+                        .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)
                 }
 
@@ -533,7 +583,7 @@ struct SettingsView: View {
                     }
                     Text("Keeps text & images for 7 days. Pinned items stay forever until you unpin or delete them.")
                         .font(.system(size: 10))
-                        .foregroundColor(settingsSecondaryText)
+                        .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)
                 }
 
@@ -547,7 +597,7 @@ struct SettingsView: View {
                     }
                     Text("Pulls the current week and events from the Mac Calendar app.")
                         .font(.system(size: 10))
-                        .foregroundColor(settingsSecondaryText)
+                        .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)
                 }
 
@@ -600,7 +650,7 @@ struct SettingsView: View {
                     }
                     Text("Focus and breaks loop automatically. Click the timer digits to type a custom length.")
                         .font(.system(size: 10))
-                        .foregroundColor(settingsSecondaryText)
+                        .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)
                 }
 
@@ -618,7 +668,7 @@ struct SettingsView: View {
                     }
                     Text("Spawned widgets stay on top. Drag edges or corners to resize · gear for opacity/blur.")
                         .font(.system(size: 10))
-                        .foregroundColor(settingsSecondaryText)
+                        .foregroundStyle(settingsTextSecondary)
                         .padding(.top, 8)
                 }
             }
@@ -637,10 +687,10 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Aura")
                                 .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.white)
+                                .foregroundStyle(settingsTextPrimary)
                             Text("Menu bar command center + Dynamic Island for Mac — media, calendar, clipboard, shelf, and focus.")
                                 .font(.system(size: 12))
-                                .foregroundColor(settingsSecondaryText)
+                                .foregroundStyle(settingsTextSecondary)
                                 .lineSpacing(3)
                         }
                         .padding(.vertical, 4)
@@ -655,9 +705,9 @@ struct SettingsView: View {
                                 Spacer()
                                 Image(systemName: "arrow.up.right")
                                     .font(.system(size: 10))
-                                    .foregroundColor(settingsSecondaryText)
+                                    .foregroundStyle(settingsTextSecondary)
                             }
-                            .foregroundColor(.white)
+                            .foregroundStyle(settingsTextPrimary)
                             .font(.system(size: 12))
                             .padding(.vertical, 4)
                         }
@@ -670,11 +720,11 @@ struct SettingsView: View {
                 Spacer()
                 Text("Designed for MacBook")
                     .font(.system(size: 10))
-                    .foregroundColor(settingsSecondaryText)
+                    .foregroundStyle(settingsTextSecondary)
                 Spacer()
             }
             .padding(.vertical, 10)
-            .background(settingsCardBG)
+            .background(settingsCardFill)
         }
     }
 
@@ -686,23 +736,36 @@ struct SettingsView: View {
 
     private func headerText(_ text: String) -> some View {
         HStack {
-            Text(text).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
+            Text(text)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(settingsTextPrimary)
             Spacer()
         }
+        .padding(.bottom, 4)
     }
 
     private func headerWithQuit(_ text: String) -> some View {
         HStack {
-            Text(text).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
+            Text(text)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(settingsTextPrimary)
             Spacer()
             Button("Quit app") { NSApp.terminate(nil) }
-                .font(.system(size: 11))
-                .foregroundColor(.white)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(settingsTextSecondary)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 6).stroke(settingsBorder))
+                .padding(.vertical, 6)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(settingsHairline, lineWidth: 1)
+                )
                 .buttonStyle(.plain)
         }
+        .padding(.bottom, 4)
     }
 
     private func settingsCard(_ title: String?, @ViewBuilder content: () -> some View) -> some View {
@@ -710,34 +773,51 @@ struct SettingsView: View {
             if let title {
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(settingsSecondaryText)
+                    .foregroundStyle(settingsTextTertiary)
+                    .tracking(0.6)
                     .textCase(.uppercase)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 10)
             }
             VStack(spacing: 0) { content() }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(settingsCardBG)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(settingsBorder))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(settingsCardFill)
+                        .background(
+                            VisualEffectView(material: .hudWindow, blendingMode: .withinWindow, cornerRadius: 14)
+                                .opacity(0.22)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(settingsCardStroke, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
     private var dividerRow: some View {
-        Rectangle().fill(settingsBorder).frame(height: 1).padding(.vertical, 1)
+        Rectangle()
+            .fill(settingsHairline)
+            .frame(height: 1)
+            .padding(.vertical, 2)
     }
 
     private func toggleRow(_ label: String, value: Binding<Bool>, onChange: @escaping (Bool) -> Void) -> some View {
         HStack {
-            Text(label).foregroundColor(.white).font(.system(size: 12))
+            Text(label)
+                .foregroundStyle(settingsTextPrimary)
+                .font(.system(size: 13, weight: .regular))
             Spacer()
             Toggle("", isOn: value)
                 .toggleStyle(.switch)
                 .controlSize(.small)
-                .tint(settingsBlue)
+                .tint(settingsAccent)
                 .onChange(of: value.wrappedValue) { _, nv in onChange(nv) }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
     }
 
     private func sliderRow(
@@ -748,33 +828,39 @@ struct SettingsView: View {
         onChange: @escaping (Double) -> Void
     ) -> some View {
         HStack {
-            Text(label).foregroundColor(.white).font(.system(size: 12))
+            Text(label)
+                .foregroundStyle(settingsTextPrimary)
+                .font(.system(size: 13))
             Spacer()
-            Text(format(value.wrappedValue)).foregroundColor(settingsSecondaryText).font(.system(size: 11))
+            Text(format(value.wrappedValue))
+                .foregroundStyle(settingsTextSecondary)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
             Slider(value: value, in: range)
-                .tint(settingsBlue)
+                .tint(settingsAccent)
                 .controlSize(.small)
-                .frame(width: 100)
+                .frame(width: 110)
                 .onChange(of: value.wrappedValue) { _, nv in onChange(nv) }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
     }
 
     private func opacitySliderRow(_ label: String, value: Binding<Double>, onChange: @escaping (Double) -> Void) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             HStack {
-                Text(label).foregroundColor(.white).font(.system(size: 12))
+                Text(label)
+                    .foregroundStyle(settingsTextPrimary)
+                    .font(.system(size: 13))
                 Spacer()
                 Text("\(Int(value.wrappedValue * 100))%")
-                    .foregroundColor(settingsSecondaryText)
-                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(settingsTextSecondary)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
             }
             Slider(value: value, in: 0.25...1.0)
-                .tint(settingsBlue)
+                .tint(settingsAccent)
                 .controlSize(.small)
                 .onChange(of: value.wrappedValue) { _, nv in onChange(nv) }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
     }
 
     private func timerPickerRow(
@@ -783,9 +869,11 @@ struct SettingsView: View {
         options: [(Int, String)],
         onChange: @escaping (Int) -> Void
     ) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             HStack {
-                Text(label).foregroundColor(.white).font(.system(size: 12))
+                Text(label)
+                    .foregroundStyle(settingsTextPrimary)
+                    .font(.system(size: 13))
                 Spacer()
             }
             Picker("", selection: value) {
@@ -796,7 +884,7 @@ struct SettingsView: View {
             .pickerStyle(.segmented)
             .onChange(of: value.wrappedValue) { _, nv in onChange(nv) }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
     }
 
     private func appConnectionRow(
@@ -811,26 +899,28 @@ struct SettingsView: View {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: 22, height: 22)
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             } else {
                 Image(systemName: appName == "Spotify" ? "music.note.list" : "apple.logo")
                     .frame(width: 22, height: 22)
-                    .foregroundColor(settingsSecondaryText)
+                    .foregroundStyle(settingsTextSecondary)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(appName).font(.system(size: 12, weight: .medium)).foregroundColor(.white)
+                Text(appName)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(settingsTextPrimary)
                 Text(isConnected.wrappedValue ? "On" : "Off")
-                    .font(.system(size: 9))
-                    .foregroundColor(isConnected.wrappedValue ? .green : settingsSecondaryText)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(isConnected.wrappedValue ? Color.green.opacity(0.85) : settingsTextTertiary)
             }
             Spacer()
             Toggle("", isOn: isConnected)
                 .toggleStyle(.switch)
                 .controlSize(.small)
-                .tint(settingsBlue)
+                .tint(settingsAccent)
                 .labelsHidden()
                 .onChange(of: isConnected.wrappedValue) { _, nv in onToggle(nv) }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 5)
     }
 }

@@ -29,17 +29,20 @@ struct MenuBarView: View {
     private var headerSection: some View {
         HStack(spacing: 12) {
             ZStack {
-                Circle()
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [.blue.opacity(0.55), .cyan.opacity(0.35)],
+                            colors: [
+                                Color(red: 0.22, green: 0.45, blue: 0.95).opacity(0.85),
+                                Color(red: 0.35, green: 0.62, blue: 1.0).opacity(0.55)
+                            ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 34, height: 34)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .semibold))
+                Image(nsImage: MenuBarIconFactory.makeIcon(size: 16))
+                    .renderingMode(.template)
                     .foregroundStyle(.white)
             }
 

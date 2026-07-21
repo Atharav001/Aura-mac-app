@@ -10,35 +10,53 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
     private var eventMonitor: Any?
 
     private override init() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // Fixed width so the island logo stays an easy click target
+        statusItem = NSStatusBar.system.statusItem(withLength: 28)
         popover = NSPopover()
-        popover.behavior = .applicationDefined
+        popover.behavior = .transient
+        popover.animates = true
         popover.contentSize = NSSize(width: 320, height: 420)
 
         super.init()
 
-        if let button = statusItem.button {
-            let image = MenuBarIconFactory.makeIcon(size: 18)
-            button.image = image
-            button.imagePosition = .imageOnly
-            button.toolTip = "Aura"
-            button.action = #selector(togglePopover)
-            button.target = self
-            let visible = DataStore.shared.bool(for: .menuBarIconVisible, default: true)
-            button.isHidden = !visible
-        }
+        configureStatusButton()
+        configurePopover()
+    }
 
+    private func configureStatusButton() {
+        guard let button = statusItem.button else { return }
+        button.image = MenuBarIconFactory.makeIcon(size: 18)
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
+        button.toolTip = "Aura"
+        button.target = self
+        button.action = #selector(togglePopover(_:))
+        button.sendAction(on: [.leftMouseUp])
+        button.isEnabled = true
+        let visible = DataStore.shared.bool(for: .menuBarIconVisible, default: true)
+        button.isHidden = !visible
+        statusItem.isVisible = visible
+    }
+
+    private func configurePopover() {
         let hostingController = NSHostingController(rootView: MenuBarView(viewModel: viewModel))
+        hostingController.view.frame = NSRect(x: 0, y: 0, width: 320, height: 420)
         popover.contentViewController = hostingController
         popover.delegate = self
     }
 
-    @objc private func togglePopover(_ sender: NSStatusBarButton) {
+    @objc private func togglePopover(_ sender: Any?) {
+        guard let button = statusItem.button else { return }
         if popover.isShown {
             closePopover()
         } else {
-            popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
-            positionWithinScreen(sender)
+            // Ensure content is attached (defensive — never lose the Command Center)
+            if popover.contentViewController == nil {
+                configurePopover()
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            positionWithinScreen(button)
             startEventMonitor()
         }
     }
@@ -78,6 +96,7 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
     }
 
     func toggleIconVisibility(_ visible: Bool) {
+        statusItem.isVisible = visible
         if let button = statusItem.button {
             button.isHidden = !visible
         }
