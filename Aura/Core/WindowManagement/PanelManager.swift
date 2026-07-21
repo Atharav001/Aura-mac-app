@@ -83,6 +83,7 @@ final class PanelManager: @unchecked Sendable {
         window.makeKeyAndOrderFront(nil)
 
         NSApp.setActivationPolicy(.regular)
+        MenuBarIconFactory.applyApplicationIcon()
         NSApp.activate(ignoringOtherApps: true)
 
         NotificationCenter.default.addObserver(

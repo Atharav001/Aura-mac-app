@@ -17,12 +17,21 @@ cp "${BINARY}" "${BUNDLE}/Contents/MacOS/${APP_NAME}"
 cp "Aura/Info.plist" "${BUNDLE}/Contents/"
 # Logos for menu bar / dock branding
 if [ -d "Aura/Resources/Logos" ]; then
-  cp -R Aura/Resources/Logos/. "${BUNDLE}/Contents/Resources/Logos/"
+  # Skip intermediate iconset folders if present
+  find Aura/Resources/Logos -maxdepth 1 -type f -exec cp {} "${BUNDLE}/Contents/Resources/Logos/" \;
+fi
+# Dock icon must live at Contents/Resources/AppIcon.icns for CFBundleIconFile
+if [ -f "Aura/Resources/Logos/AppIcon.icns" ]; then
+  cp "Aura/Resources/Logos/AppIcon.icns" "${BUNDLE}/Contents/Resources/AppIcon.icns"
 fi
 # Also copy SPM resource bundle logos if present
 SPM_RES=$(find .build -type d -path "*Aura_Aura.bundle*" 2>/dev/null | head -1)
 if [ -n "$SPM_RES" ] && [ -d "$SPM_RES" ]; then
   cp -R "$SPM_RES"/. "${BUNDLE}/Contents/Resources/" 2>/dev/null || true
+fi
+# Re-assert AppIcon at Resources root after SPM copy
+if [ -f "Aura/Resources/Logos/AppIcon.icns" ]; then
+  cp "Aura/Resources/Logos/AppIcon.icns" "${BUNDLE}/Contents/Resources/AppIcon.icns"
 fi
 
 # Sign with entitlements so Spotify/Music Apple Events + Calendar work

@@ -43,7 +43,8 @@ let package = Package(
                 "BoringNotch/menu/StatusBarMenu.swift",
             ],
             resources: [
-                .copy("Resources/Logos")
+                .copy("Resources/Logos"),
+                .copy("Resources/Logos/AppIcon.icns"),
             ],
             swiftSettings: [
                 .swiftLanguageMode(.v5)

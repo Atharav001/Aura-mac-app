@@ -328,6 +328,7 @@ struct SettingsView: View {
                         DataStore.shared.set(key: .dockVisible, value: $0)
                         if $0 {
                             NSApp.setActivationPolicy(.regular)
+                            MenuBarIconFactory.applyApplicationIcon()
                             NSApp.activate(ignoringOtherApps: true)
                         } else {
                             NSApp.setActivationPolicy(.accessory)

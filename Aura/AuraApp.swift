@@ -17,14 +17,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = DataStore.shared
         _ = MenuBarManager.shared
-        if let dockIcon = MenuBarIconFactory.makeDockIcon(size: 128) {
-            NSApp.applicationIconImage = dockIcon
-        }
+        MenuBarIconFactory.applyApplicationIcon()
         // Boring Notch Dynamic Island (vendored from TheBoredTeam/boring.notch)
         BoringNotchHost.shared.setup()
         FocusManager.shared.setup()
 
         applyStoredAppearance()
+
+        // If user prefers dock visibility, show branded dock icon immediately
+        if DataStore.shared.bool(for: .dockVisible, default: false) {
+            NSApp.setActivationPolicy(.regular)
+            MenuBarIconFactory.applyApplicationIcon()
+        }
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
 
