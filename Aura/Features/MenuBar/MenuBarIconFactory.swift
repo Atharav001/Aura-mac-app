@@ -186,40 +186,23 @@ enum MenuBarIconFactory {
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             NSGraphicsContext.current?.imageInterpolation = .high
             NSColor.black.setFill()
-
-            let cx = rect.midX
-            let cy = rect.midY + size * 0.01
-            let h = size * 0.72
-            let w = size * 0.62
-            let stroke = size * 0.14
-            let top = cy - h / 2
-            let bottom = cy + h / 2
-            let left = cx - w / 2
-            let right = cx + w / 2
-            let inset = stroke * 0.85
-
-            let leftLeg = NSBezierPath()
-            leftLeg.move(to: NSPoint(x: cx - 0.5, y: top))
-            leftLeg.line(to: NSPoint(x: left, y: bottom))
-            leftLeg.line(to: NSPoint(x: left + stroke, y: bottom))
-            leftLeg.line(to: NSPoint(x: cx + inset * 0.2, y: top + stroke))
-            leftLeg.close()
-            leftLeg.fill()
-
-            let rightLeg = NSBezierPath()
-            rightLeg.move(to: NSPoint(x: cx + 0.5, y: top))
-            rightLeg.line(to: NSPoint(x: right, y: bottom))
-            rightLeg.line(to: NSPoint(x: right - stroke, y: bottom))
-            rightLeg.line(to: NSPoint(x: cx - inset * 0.2, y: top + stroke))
-            rightLeg.close()
-            rightLeg.fill()
-
-            let barH = stroke * 0.78
-            let barW = w * 0.34
-            let barY = cy + h * 0.05
-            NSBezierPath(
-                rect: NSRect(x: cx - barW / 2, y: barY - barH / 2, width: barW, height: barH)
-            ).fill()
+            let pillH = size * 0.26
+            let pillW = size * 0.72
+            let pill = NSRect(
+                x: (rect.width - pillW) / 2,
+                y: (rect.height - pillH) / 2,
+                width: pillW,
+                height: pillH
+            )
+            NSBezierPath(roundedRect: pill, xRadius: pillH / 2, yRadius: pillH / 2).fill()
+            // Clear aperture (destination-out)
+            let ow = pillH * 0.52
+            let oh = pillH * 0.40
+            let hole = NSRect(x: pill.midX - ow / 2, y: pill.midY - oh / 2, width: ow, height: oh)
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: hole).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
             return true
         }
         image.isTemplate = true
@@ -230,43 +213,26 @@ enum MenuBarIconFactory {
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             NSGraphicsContext.current?.imageInterpolation = .high
             let radius = size * 0.2237
-            NSColor(calibratedWhite: 0.055, alpha: 1).setFill()
+            let bg = NSColor(calibratedWhite: 0.04, alpha: 1)
+            bg.setFill()
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
 
-            NSColor.white.setFill()
-            let cx = rect.midX
-            let cy = rect.midY + size * 0.01
-            let h = size * 0.38
-            let w = size * 0.32
-            let stroke = size * 0.07
-            let top = cy - h / 2
-            let bottom = cy + h / 2
-            let left = cx - w / 2
-            let right = cx + w / 2
-            let inset = stroke * 0.85
+            NSColor(calibratedWhite: 0.96, alpha: 1).setFill()
+            let pillH = size * 0.145
+            let pillW = size * 0.42
+            let pill = NSRect(
+                x: (rect.width - pillW) / 2,
+                y: (rect.height - pillH) / 2,
+                width: pillW,
+                height: pillH
+            )
+            NSBezierPath(roundedRect: pill, xRadius: pillH / 2, yRadius: pillH / 2).fill()
 
-            let leftLeg = NSBezierPath()
-            leftLeg.move(to: NSPoint(x: cx - 0.5, y: top))
-            leftLeg.line(to: NSPoint(x: left, y: bottom))
-            leftLeg.line(to: NSPoint(x: left + stroke, y: bottom))
-            leftLeg.line(to: NSPoint(x: cx + inset * 0.2, y: top + stroke))
-            leftLeg.close()
-            leftLeg.fill()
-
-            let rightLeg = NSBezierPath()
-            rightLeg.move(to: NSPoint(x: cx + 0.5, y: top))
-            rightLeg.line(to: NSPoint(x: right, y: bottom))
-            rightLeg.line(to: NSPoint(x: right - stroke, y: bottom))
-            rightLeg.line(to: NSPoint(x: cx - inset * 0.2, y: top + stroke))
-            rightLeg.close()
-            rightLeg.fill()
-
-            let barH = stroke * 0.78
-            let barW = w * 0.34
-            let barY = cy + h * 0.05
-            NSBezierPath(
-                rect: NSRect(x: cx - barW / 2, y: barY - barH / 2, width: barW, height: barH)
-            ).fill()
+            bg.setFill()
+            let ow = pillH * 0.52
+            let oh = pillH * 0.40
+            let hole = NSRect(x: pill.midX - ow / 2, y: pill.midY - oh / 2, width: ow, height: oh)
+            NSBezierPath(ovalIn: hole).fill()
             return true
         }
         return image
