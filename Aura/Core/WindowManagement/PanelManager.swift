@@ -93,10 +93,7 @@ final class PanelManager: @unchecked Sendable {
         ) { [weak self] _ in
             Task { @MainActor in
                 self?.settingsWindow = nil
-                let dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
-                if !dockVisible && (self?.panels.isEmpty == true) {
-                    NSApp.setActivationPolicy(.accessory)
-                }
+                self?.restoreAccessoryPolicyIfNeeded()
             }
         }
 
@@ -111,7 +108,12 @@ final class PanelManager: @unchecked Sendable {
             NotificationCenter.default.removeObserver(observer)
         }
         Task { @MainActor in
-            info.panel?.close()
+            // Only dismiss this widget — never terminate the menu-bar / notch app.
+            if let panel = info.panel {
+                panel.orderOut(nil)
+                panel.close()
+            }
+            restoreAccessoryPolicyIfNeeded()
         }
     }
 
@@ -125,7 +127,22 @@ final class PanelManager: @unchecked Sendable {
         }
         allData.1.forEach { NotificationCenter.default.removeObserver($0) }
         Task { @MainActor in
-            allData.0.forEach { $0.close() }
+            allData.0.forEach { panel in
+                panel.orderOut(nil)
+                panel.close()
+            }
+            restoreAccessoryPolicyIfNeeded()
+        }
+    }
+
+    /// After the last widget/settings window closes, return to menu-bar mode (app stays running).
+    @MainActor
+    func restoreAccessoryPolicyIfNeeded() {
+        let dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
+        let hasSettings = settingsWindow?.isVisible == true
+        let hasPanels = lock.withLock { !panels.isEmpty }
+        if !dockVisible && !hasSettings && !hasPanels {
+            NSApp.setActivationPolicy(.accessory)
         }
     }
 

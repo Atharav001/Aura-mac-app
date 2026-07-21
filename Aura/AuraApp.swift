@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import AppKit
 
 @main
 struct AuraApp: App {
@@ -14,11 +15,20 @@ struct AuraApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Retained so AppKit never treats “zero windows” as a reason to exit a menu-bar app.
+    private var keepAliveWindow: NSWindow?
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Menu-bar / notch app: stay alive without a dock icon unless the user opts in.
+        let dockVisible = DataStore.shared.bool(for: .dockVisible, default: false)
+        NSApp.setActivationPolicy(dockVisible ? .regular : .accessory)
+
+        installKeepAliveWindow()
+
         _ = DataStore.shared
         _ = MenuBarManager.shared
         MenuBarIconFactory.applyApplicationIcon()
@@ -28,9 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         applyStoredAppearance()
 
-        // If user prefers dock visibility, show branded dock icon immediately
-        if DataStore.shared.bool(for: .dockVisible, default: false) {
-            NSApp.setActivationPolicy(.regular)
+        if dockVisible {
             MenuBarIconFactory.applyApplicationIcon()
         }
 
@@ -54,6 +62,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .pomodoroComplete,
             object: nil
         )
+    }
+
+    /// Invisible retained window — closing Pomodoro/Stopwatch/etc. must not quit Aura.
+    private func installKeepAliveWindow() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
+        window.collectionBehavior = [.transient, .ignoresCycle, .canJoinAllSpaces]
+        window.orderOut(nil)
+        keepAliveWindow = window
     }
 
     func applyStoredAppearance() {

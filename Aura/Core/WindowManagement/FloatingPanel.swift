@@ -22,7 +22,9 @@ final class FloatingPanel: NSPanel {
         isMovableByWindowBackground = true
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
-        isReleasedWhenClosed = true
+        // Keep panels managed by PanelManager — auto-release on close can tear down the process
+        // when this was the last visible window in a SwiftUI Settings-only app.
+        isReleasedWhenClosed = false
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
         contentMinSize = NSSize(width: 180, height: 150)
