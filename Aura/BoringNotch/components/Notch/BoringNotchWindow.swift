@@ -38,8 +38,8 @@ class BoringNotchWindow: NSPanel {
             .ignoresCycle,
         ]
 
-        // Stay above desktop content but do not needlessly fight the menu bar:
-        // closed window is only as wide as the hardware notch (see BoringNotchHost).
+        // Above desktop content; BoringNotchHost toggles ignoresMouseEvents for
+        // menu-bar click-through while the island is closed (window stays full size).
         level = .popUpMenu + 1
         ignoresMouseEvents = true
         acceptsMouseMovedEvents = true

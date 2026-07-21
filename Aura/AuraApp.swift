@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         _ = DataStore.shared
         _ = MenuBarManager.shared
+        if let dockIcon = MenuBarIconFactory.makeDockIcon(size: 128) {
+            NSApp.applicationIconImage = dockIcon
+        }
         // Boring Notch Dynamic Island (vendored from TheBoredTeam/boring.notch)
         BoringNotchHost.shared.setup()
         FocusManager.shared.setup()

@@ -3,9 +3,12 @@ import Combine
 import Defaults
 import SwiftUI
 
-/// Hosts Boring Notch ContentView. Window frame shrinks to the physical notch when
-/// closed so macOS menu-bar status items stay clickable (hit-testing alone is not enough
-/// for SystemUIServer extras under a high-level panel).
+/// Hosts Boring Notch ContentView.
+///
+/// Important: do **not** resize the NSWindow during open/close — that races SwiftUI
+/// layout and aborts AppKit (`NSWindowGetDisplayCycleObserverForLayout` → SIGABRT).
+/// Instead keep a stable open-sized frame and toggle `ignoresMouseEvents` so menu-bar
+/// icons beside the island stay clickable while the notch is closed.
 @MainActor
 final class BoringNotchHost {
     static let shared = BoringNotchHost()
@@ -14,9 +17,9 @@ final class BoringNotchHost {
     private var window: NSWindow?
     private var windows: [String: NSWindow] = [:]
     private var viewModels: [String: BoringViewModel] = [:]
-    private var cancellables = Set<AnyCancellable>()
     private var mouseMonitor: Any?
     private var localMouseMonitor: Any?
+    private var passThroughTimer: Timer?
     private var screenObserver: NSObjectProtocol?
     private var selectedScreenObserver: NSObjectProtocol?
     private var notchHeightObserver: NSObjectProtocol?
@@ -39,21 +42,6 @@ final class BoringNotchHost {
         _ = MusicManager.shared
         _ = BatteryStatusViewModel.shared
         _ = CalendarManager.shared
-
-        // Resize panel whenever open/closed or live-activity width changes
-        Publishers.CombineLatest3(vm.$notchState, vm.$notchSize, vm.$closedNotchSize)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _, _, _ in
-                self?.syncAllWindowFrames(animated: true)
-            }
-            .store(in: &cancellables)
-
-        MusicManager.shared.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.syncAllWindowFrames(animated: true)
-            }
-            .store(in: &cancellables)
 
         adjustWindowPosition(changeAlpha: true)
         startMousePassThroughMonitor()
@@ -79,7 +67,7 @@ final class BoringNotchHost {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.syncAllWindowFrames(animated: false) }
+            Task { @MainActor in self?.adjustWindowPosition() }
         }
 
         showOnAllDisplaysObserver = NotificationCenter.default.addObserver(
@@ -94,23 +82,15 @@ final class BoringNotchHost {
         }
     }
 
-    // MARK: - Mouse pass-through (critical for menu-bar icons)
+    // MARK: - Mouse pass-through
 
-    /// When the notch is closed, ignore mouse events unless the cursor is over the
-    /// physical island. High-level panels otherwise steal clicks from Control Center etc.
     private func startMousePassThroughMonitor() {
-        let handler: (NSEvent) -> Void = { [weak self] _ in
+        // Lightweight timer is safer than flooding Task { @MainActor } from every mouse move
+        passThroughTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.updateMousePassThrough() }
         }
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDragged],
-            handler: handler
-        )
-        localMouseMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.mouseMoved, .leftMouseDragged]
-        ) { [weak self] event in
-            Task { @MainActor in self?.updateMousePassThrough() }
-            return event
+        if let passThroughTimer {
+            RunLoop.main.add(passThroughTimer, forMode: .common)
         }
         updateMousePassThrough()
     }
@@ -129,34 +109,29 @@ final class BoringNotchHost {
 
     private func applyPassThrough(to window: NSWindow, viewModel: BoringViewModel, mouse: NSPoint) {
         if viewModel.notchState == .open {
-            window.ignoresMouseEvents = false
+            if window.ignoresMouseEvents {
+                window.ignoresMouseEvents = false
+            }
             return
         }
-        // Closed: only accept input while cursor is over the island frame (+ tiny pad)
-        let frame = window.frame.insetBy(dx: -4, dy: -6)
-        window.ignoresMouseEvents = !frame.contains(mouse)
-    }
 
-    // MARK: - Window sizing
-
-    /// Frame that must NOT cover left/right menu-bar status items when closed.
-    private func targetFrame(for viewModel: BoringViewModel, on screen: NSScreen) -> NSRect {
-        let screenFrame = screen.frame
-        let size = panelSize(for: viewModel)
-        return NSRect(
-            x: screenFrame.midX - size.width / 2,
-            y: screenFrame.maxY - size.height,
-            width: size.width,
-            height: size.height
-        )
-    }
-
-    private func panelSize(for viewModel: BoringViewModel) -> CGSize {
-        if viewModel.notchState == .open {
-            return windowSize
+        guard let screen = window.screen ?? NSScreen.main else {
+            window.ignoresMouseEvents = true
+            return
         }
+
+        // Only the physical island (screen coords) is interactive while closed
+        let island = closedIslandScreenRect(for: viewModel, on: screen)
+        let shouldIgnore = !island.contains(mouse)
+        if window.ignoresMouseEvents != shouldIgnore {
+            window.ignoresMouseEvents = shouldIgnore
+        }
+    }
+
+    /// Hardware-notch sized hit target at the top-center of the screen.
+    private func closedIslandScreenRect(for viewModel: BoringViewModel, on screen: NSScreen) -> NSRect {
         var width = max(viewModel.closedNotchSize.width, 120)
-        let height = max(viewModel.closedNotchSize.height, 28) + 4
+        let height = max(viewModel.closedNotchSize.height, 28) + 10
 
         let music = MusicManager.shared
         if (music.isPlaying || !music.isPlayerIdle),
@@ -164,42 +139,24 @@ final class BoringNotchHost {
            !viewModel.hideOnClosed {
             width += (2 * max(0, viewModel.effectiveClosedNotchHeight - 12) + 20)
         }
-        // Do NOT add large hover padding to the window itself — that covers menu icons.
-        // Hover discovery uses ignoresMouseEvents toggling + small inset instead.
-        return CGSize(width: width, height: height)
+        // Tiny hover pad only — not large enough to cover Control Center
+        if Defaults[.extendHoverArea] {
+            width += 16
+        }
+
+        let frame = screen.frame
+        return NSRect(
+            x: frame.midX - width / 2,
+            y: frame.maxY - height,
+            width: width,
+            height: height
+        )
     }
 
-    private func syncAllWindowFrames(animated: Bool) {
-        if Defaults[.showOnAllDisplays] {
-            for (uuid, win) in windows {
-                guard let screen = win.screen ?? NSScreen.screens.first(where: { $0.displayUUID == uuid }) else { continue }
-                let viewModel = viewModels[uuid] ?? vm
-                applyFrame(targetFrame(for: viewModel, on: screen), to: win, animated: animated)
-            }
-        } else if let window,
-                  let screen = window.screen
-                    ?? NSScreen.screen(withUUID: BoringViewCoordinator.shared.selectedScreenUUID)
-                    ?? NSScreen.main {
-            applyFrame(targetFrame(for: vm, on: screen), to: window, animated: animated)
-        }
-        updateMousePassThrough()
-    }
-
-    private func applyFrame(_ frame: NSRect, to window: NSWindow, animated: Bool) {
-        guard window.frame != frame else { return }
-        if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.28
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                window.animator().setFrame(frame, display: true)
-            }
-        } else {
-            window.setFrame(frame, display: true)
-        }
-    }
+    // MARK: - Window create / position (stable full open size — never animates on hover)
 
     private func createBoringNotchWindow(for screen: NSScreen, with viewModel: BoringViewModel) -> NSWindow {
-        let frame = targetFrame(for: viewModel, on: screen)
+        let frame = stableWindowFrame(on: screen)
         let styleMask: NSWindow.StyleMask = [.borderless, .nonactivatingPanel, .fullSizeContentView]
         let panel = BoringNotchWindow(
             contentRect: frame,
@@ -208,15 +165,26 @@ final class BoringNotchHost {
             defer: false
         )
 
+        // Fixed container so SwiftUI layout never resizes the NSWindow.
+        // Without this, NSHostingView.updateAnimatedWindowSize races AppKit
+        // layout on open and aborts (_postWindowNeedsUpdateConstraints).
+        let container = NSView(frame: NSRect(origin: .zero, size: frame.size))
+        container.autoresizingMask = [.width, .height]
+        container.wantsLayer = true
+
         let hosting = NSHostingView(
             rootView: ContentView()
                 .environmentObject(viewModel)
+                .frame(width: frame.width, height: frame.height, alignment: .top)
         )
-        hosting.frame = NSRect(origin: .zero, size: frame.size)
+        hosting.frame = container.bounds
         hosting.autoresizingMask = [.width, .height]
-        panel.contentView = hosting
+        if #available(macOS 13.0, *) {
+            hosting.sizingOptions = []
+        }
+        container.addSubview(hosting)
+        panel.contentView = container
 
-        // Start click-through until cursor enters the island
         panel.ignoresMouseEvents = true
         panel.acceptsMouseMovedEvents = true
         panel.hidesOnDeactivate = false
@@ -226,10 +194,21 @@ final class BoringNotchHost {
         return panel
     }
 
-    private func positionWindow(_ window: NSWindow, on screen: NSScreen, changeAlpha: Bool = false, viewModel: BoringViewModel? = nil) {
+    private func stableWindowFrame(on screen: NSScreen) -> NSRect {
+        let screenFrame = screen.frame
+        let size = windowSize
+        return NSRect(
+            x: screenFrame.midX - size.width / 2,
+            y: screenFrame.maxY - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private func positionWindow(_ window: NSWindow, on screen: NSScreen, changeAlpha: Bool = false) {
         if changeAlpha { window.alphaValue = 0 }
-        let vm = viewModel ?? self.vm
-        applyFrame(targetFrame(for: vm, on: screen), to: window, animated: false)
+        // Always set the stable frame synchronously — never during SwiftUI open animation
+        window.setFrame(stableWindowFrame(on: screen), display: true)
         window.alphaValue = 1
         window.orderFrontRegardless()
         updateMousePassThrough()
@@ -266,7 +245,7 @@ final class BoringNotchHost {
                     windows[uuid] = w
                     return w
                 }()
-                positionWindow(win, on: screen, changeAlpha: changeAlpha, viewModel: viewModel)
+                positionWindow(win, on: screen, changeAlpha: changeAlpha)
             }
             if let window {
                 window.close()
@@ -286,23 +265,26 @@ final class BoringNotchHost {
                 window = createBoringNotchWindow(for: selectedScreen, with: vm)
             }
             if let window {
-                positionWindow(window, on: selectedScreen, changeAlpha: changeAlpha, viewModel: vm)
+                positionWindow(window, on: selectedScreen, changeAlpha: changeAlpha)
             }
         }
     }
 
     func open() {
+        window?.ignoresMouseEvents = false
+        windows.values.forEach { $0.ignoresMouseEvents = false }
         withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
             vm.open()
         }
-        window?.ignoresMouseEvents = false
-        windows.values.forEach { $0.ignoresMouseEvents = false }
     }
 
     func close() {
         withAnimation(.spring(response: 0.45, dampingFraction: 1.0)) {
             vm.close()
         }
-        updateMousePassThrough()
+        // Defer pass-through update until after SwiftUI settles
+        DispatchQueue.main.async { [weak self] in
+            self?.updateMousePassThrough()
+        }
     }
 }
