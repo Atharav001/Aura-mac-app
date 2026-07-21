@@ -18,9 +18,10 @@ final class MenuBarManager: NSObject, @unchecked Sendable {
         super.init()
 
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Aura")
-            image?.isTemplate = true
+            let image = MenuBarIconFactory.makeIcon(size: 18)
             button.image = image
+            button.imagePosition = .imageOnly
+            button.toolTip = "Aura"
             button.action = #selector(togglePopover)
             button.target = self
             let visible = DataStore.shared.bool(for: .menuBarIconVisible, default: true)

@@ -509,7 +509,11 @@ struct ContentView: View {
     // MARK: - Hover Management
 
     private func handleHover(_ hovering: Bool) {
-        if coordinator.firstLaunch { return }
+        // Ensure first-launch gate cannot permanently block Aura
+        if coordinator.firstLaunch {
+            coordinator.firstLaunch = false
+            coordinator.helloAnimationRunning = false
+        }
         hoverTask?.cancel()
         
         if hovering {
@@ -548,7 +552,9 @@ struct ContentView: View {
                     }
                     
                     if self.vm.notchState == .open && !self.vm.isBatteryPopoverActive && !SharingStateManager.shared.preventNotchClose {
-                        self.vm.close()
+                        withAnimation(self.animationSpring) {
+                            self.vm.close()
+                        }
                     }
                 }
             }

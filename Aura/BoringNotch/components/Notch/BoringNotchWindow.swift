@@ -3,6 +3,7 @@
 //  boringNotch
 //
 //  Created by Harsh Vardhan  Goswami  on 06/08/24.
+//  Tuned for Aura hosting: reliable hover hit-testing without CGSSpace.
 //
 
 import Cocoa
@@ -20,31 +21,30 @@ class BoringNotchWindow: NSPanel {
             backing: backing,
             defer: flag
         )
-        
+
         isFloatingPanel = true
         isOpaque = false
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         backgroundColor = .clear
         isMovable = false
-        
+        hasShadow = false
+        isReleasedWhenClosed = false
+
         collectionBehavior = [
             .fullScreenAuxiliary,
             .stationary,
             .canJoinAllSpaces,
             .ignoresCycle,
         ]
-        
-        isReleasedWhenClosed = false
-        level = .mainMenu + 3
-        hasShadow = false
+
+        // Above menu bar so hover over the hardware notch works
+        level = .statusBar
+        ignoresMouseEvents = false
+        acceptsMouseMovedEvents = true
+        hidesOnDeactivate = false
     }
-    
-    override var canBecomeKey: Bool {
-        false
-    }
-    
-    override var canBecomeMain: Bool {
-        false
-    }
+
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
 }

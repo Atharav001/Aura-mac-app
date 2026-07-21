@@ -21,10 +21,19 @@ final class BoringNotchHost {
     private init() {}
 
     func setup() {
+        // Skip BN onboarding gate — otherwise hover never opens the notch
+        UserDefaults.standard.set(false, forKey: "firstLaunch")
+        UserDefaults.standard.set(false, forKey: "showWhatsNew")
+        BoringViewCoordinator.shared.firstLaunch = false
+        BoringViewCoordinator.shared.showWhatsNew = false
+        BoringViewCoordinator.shared.helloAnimationRunning = false
+
         // Force Apple Music / Spotify controllers — MediaRemote adapter framework is not bundled in SPM
         if Defaults[.mediaController] == .nowPlaying {
             Defaults[.mediaController] = MusicManager.shared.isNowPlayingDeprecated ? .appleMusic : .spotify
         }
+
+        Defaults[.openNotchOnHover] = true
 
         _ = MusicManager.shared
         _ = BatteryStatusViewModel.shared
@@ -70,41 +79,54 @@ final class BoringNotchHost {
 
     private func createBoringNotchWindow(for screen: NSScreen, with viewModel: BoringViewModel) -> NSWindow {
         let rect = NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height)
-        let styleMask: NSWindow.StyleMask = [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow]
+        let styleMask: NSWindow.StyleMask = [.borderless, .nonactivatingPanel, .fullSizeContentView]
         let panel = BoringNotchWindow(
             contentRect: rect,
             styleMask: styleMask,
             backing: .buffered,
             defer: false
         )
-        panel.contentView = NSHostingView(
+
+        let hosting = NSHostingView(
             rootView: ContentView()
                 .environmentObject(viewModel)
         )
+        hosting.frame = rect
+        hosting.autoresizingMask = [.width, .height]
+        panel.contentView = hosting
+
+        // Critical: receive hover / clicks (do NOT use BN CGSSpace — breaks hit testing in Aura)
+        panel.ignoresMouseEvents = false
+        panel.acceptsMouseMovedEvents = true
+        panel.hidesOnDeactivate = false
+        panel.isExcludedFromWindowsMenu = true
         panel.orderFrontRegardless()
-        NotchSpaceManager.shared.notchSpace.windows.insert(panel)
         return panel
     }
 
     private func positionWindow(_ window: NSWindow, on screen: NSScreen, changeAlpha: Bool = false) {
         if changeAlpha { window.alphaValue = 0 }
         let screenFrame = screen.frame
-        window.setFrameOrigin(
-            NSPoint(
-                x: screenFrame.origin.x + (screenFrame.width / 2) - window.frame.width / 2,
-                y: screenFrame.origin.y + screenFrame.height - window.frame.height
-            )
+        let size = windowSize
+        window.setFrame(
+            NSRect(
+                x: screenFrame.origin.x + (screenFrame.width / 2) - size.width / 2,
+                y: screenFrame.origin.y + screenFrame.height - size.height,
+                width: size.width,
+                height: size.height
+            ),
+            display: true
         )
         window.alphaValue = 1
+        window.orderFrontRegardless()
     }
 
     private func cleanupWindows() {
-        windows.values.forEach { $0.close(); NotchSpaceManager.shared.notchSpace.windows.remove($0) }
+        windows.values.forEach { $0.close() }
         windows.removeAll()
         viewModels.removeAll()
         if let window {
             window.close()
-            NotchSpaceManager.shared.notchSpace.windows.remove(window)
             self.window = nil
         }
     }
@@ -112,11 +134,9 @@ final class BoringNotchHost {
     func adjustWindowPosition(changeAlpha: Bool = false) {
         if Defaults[.showOnAllDisplays] {
             let screens = NSScreen.screens
-            // Close windows for removed screens
             let uuids = Set(screens.compactMap(\.displayUUID))
             for (uuid, win) in windows where !uuids.contains(uuid) {
                 win.close()
-                NotchSpaceManager.shared.notchSpace.windows.remove(win)
                 windows.removeValue(forKey: uuid)
                 viewModels.removeValue(forKey: uuid)
             }
@@ -134,14 +154,12 @@ final class BoringNotchHost {
                 }()
                 positionWindow(win, on: screen, changeAlpha: changeAlpha)
             }
-            // Tear down single-display window if any
             if let window {
                 window.close()
-                NotchSpaceManager.shared.notchSpace.windows.remove(window)
                 self.window = nil
             }
         } else {
-            windows.values.forEach { $0.close(); NotchSpaceManager.shared.notchSpace.windows.remove($0) }
+            windows.values.forEach { $0.close() }
             windows.removeAll()
             viewModels.removeAll()
 
@@ -159,6 +177,15 @@ final class BoringNotchHost {
         }
     }
 
-    func open() { vm.open() }
-    func close() { vm.close() }
+    func open() {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
+            vm.open()
+        }
+    }
+
+    func close() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 1.0)) {
+            vm.close()
+        }
+    }
 }
